@@ -1,12 +1,14 @@
 'use client';
 import { experimental_useObject as useObject } from '@ai-sdk/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { z } from 'zod';
-import { User, Bot, FileText, X, Save, Sparkles } from 'lucide-react';
+import { User, Bot, FileText, X, Save, Sparkles,   ExternalLink, Image as ImageIcon, Paperclip  } from 'lucide-react';
+import { FloatingDock } from '@/components/FloatingDock';
+import { Message, ModelOption, UploadedFile } from './types/chat';
 
 // Dynamically import the TipTap editor (client-only)
-const RichTextEditor = dynamic(() => import('./RichTextEditor'), { ssr: false });
+const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), { ssr: false });
 
 // Schema matching your API
 const CanvasDocumentSchema = z.object({
@@ -20,25 +22,6 @@ const CanvasDocumentSchema = z.object({
     category: z.string().optional(),
   }).optional(),
 });
-
-// Infer the type from the schema
-type CanvasDocumentType = z.infer<typeof CanvasDocumentSchema>;
-
-interface Message {
-  id: string;
-  role: string;
-  content: string;
-  document?: {
-    title?: string;
-    content: string;
-    extra?: {
-      wordCount?: number;
-      estimatedReadTime?: string;
-      tags?: string[];
-      category?: string;
-    };
-  };
-}
 
 // Helper function to clean the extra object from PartialObject to proper types
 const cleanExtraObject = (extra: any) => {
@@ -60,13 +43,26 @@ export default function Chat() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const [editorContent, setEditorContent] = useState('');
+  //Ref-Auto Scroll Behaviour
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  //Input Box States
+  const [selectedModel, setSelectedModel] = useState<ModelOption>({
+  "id": "gemini-1.5-flash",
+  "name": "Gemini 1.5 Flash",
+  "provider": "Google"
+});
+
+  const [uploadedFile, setUploadedFile] = useState<UploadedFile>();
   
   const { object, submit, isLoading, error } = useObject({
     api: '/api/chat',
     schema: CanvasDocumentSchema,
   });
+  const handleFileRemove = () => {
+    setUploadedFile(undefined);
+  };
 
-  console.log(messages)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -75,6 +71,7 @@ export default function Chat() {
       id: Date.now().toString(),
       role: 'user',
       content: input,
+      file : uploadedFile
     };
     
     const newMessages = [...messages, userMessage];
@@ -83,12 +80,22 @@ export default function Chat() {
     const formattedMessages = newMessages.map(msg => ({
       role: msg.role,
       content: msg.content,
+      file: msg.file
     }));
-
-    submit({ messages: formattedMessages });
+    submit({ messages: formattedMessages , model : selectedModel });
     setInput('');
+    setUploadedFile(undefined)
   };
-
+  // Scroll to bottom whenever messages change
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      container.scrollTo({
+        top : container.scrollHeight,
+        behavior : 'smooth'
+      })
+    }
+  }, [messages]);
   // Handle AI response and document creation
   useEffect(() => {
     if (object?.general && !isLoading) {
@@ -113,18 +120,18 @@ export default function Chat() {
 
       // Auto-open editor if document exists
       if (object.document) {
+        setIsEditorOpen(true);
         setActiveDocumentId(aiMessage.id);
         setEditorContent(object.document);
-        setIsEditorOpen(true);
       }
     }
   }, [object, isLoading]);
 
   const openDocument = (messageId: string, document: Message['document']) => {
     if (document) {
+      setIsEditorOpen(true);
       setActiveDocumentId(messageId);
       setEditorContent(document.content);
-      setIsEditorOpen(true);
     }
   };
 
@@ -170,9 +177,9 @@ export default function Chat() {
           </div>
         </div>
 
-        <div className={`h-full ${!isEditorOpen && 'w-[50%]'} flex flex-col justify-between overflow-y-auto relative`}>
+        <div ref={containerRef} className={`h-full ${!isEditorOpen && 'w-[50%]'} flex flex-col justify-between overflow-y-auto relative`}>
         {/* Messages Container */}
-          <div className="p-4 space-y-4 ">
+          <div className="p-4 space-y-4 mb-5">
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -182,7 +189,7 @@ export default function Chat() {
               >
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                   message.role === 'user' 
-                    ? 'bg-blue-500' 
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600' 
                     : 'bg-gradient-to-r from-purple-500 to-pink-500'
                 }`}>
                   {message.role === 'user' ? (
@@ -192,7 +199,7 @@ export default function Chat() {
                   )}
                 </div>
 
-                <div className={`flex-1 max-w-[80%] ${
+                <div className={`flex-1 max-w-[60%] ${
                   message.role === 'user' ? 'flex justify-end' : ''
                 }`}>
                   <div
@@ -201,14 +208,113 @@ export default function Chat() {
                         ? 'bg-blue-500 text-white rounded-br-md'
                         : 'bg-gray-800 text-gray-100 rounded-bl-md border border-gray-700'
                     } ${
-                      message.document ? 'cursor-pointer hover:shadow-lg transition-shadow' : ''
+                      message.document ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border hover:border-white' : ''
                     }`}
                     onClick={() => message.document && openDocument(message.id, message.document)}
                   >
+                    {/* Message Content */}
                     <div className="prose prose-invert max-w-none text-sm leading-relaxed">
                       {message.content}
                     </div>
                     
+                    {/* File Attachment Section */}
+                    {message.file && (
+                      <div className="mt-3 pt-2">
+                        {/* Image Files */}
+                        {message.file.metadata?.type?.startsWith('image/') && (
+                          <div className="space-y-2">
+                            <img 
+                              src={message.file.fileUrl} 
+                              alt={message.file.fileName}
+                              className="max-w-full h-auto rounded-lg border border-gray-300 shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
+                              style={{ maxHeight: '300px' }}
+                              onClick={() => window.open(message?.file?.fileUrl, '_blank')}
+                            />
+                            <div className="flex items-center space-x-2 text-xs opacity-75">
+                              <ImageIcon className="w-3 h-3" />
+                              <span>{message.file.fileName}</span>
+                              <span>({(message.file.metadata.size / 1024).toFixed(1)} KB)</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* PDF Files */}
+                        {message.file.metadata?.type === 'application/pdf' && (
+                          <div className="space-y-2 w-[300px]">
+                            <div 
+                              className="flex items-center space-x-3 p-3 bg-red-50 border border-red-200 rounded-lg cursor-pointer hover:bg-red-100 transition-colors w-full"
+                              onClick={() => window.open(message?.file?.fileUrl, '_blank')}
+                            >
+                              <div className="flex-shrink-0">
+                                <FileText className="w-8 h-8 text-red-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-red-900 truncate">
+                                  {message.file.fileName}
+                                </p>
+                                <p className="text-xs text-red-600">
+                                  PDF • {(message.file.metadata.size / 1024).toFixed(1)} KB
+                                </p>
+                              </div>
+                              <ExternalLink className="w-4 h-4 text-red-600" />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Text Files */}
+                        {(message.file.metadata?.type?.startsWith('text/') || 
+                          message.file.fileName?.match(/\.(txt|md|json|js|ts|jsx|tsx|css|html|xml|csv)$/i)) && (
+                          <div className="space-y-2 w-[300px]">
+                            <div 
+                              className="flex items-center space-x-3 p-3 bg-green-50 border border-green-200 rounded-lg cursor-pointer hover:bg-green-100 transition-colors"
+                              onClick={() => window.open(message?.file?.fileUrl, '_blank')}
+                            >
+                              <div className="flex-shrink-0">
+                                <FileText className="w-8 h-8 text-green-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-green-900 truncate">
+                                  {message.file.fileName}
+                                </p>
+                                <p className="text-xs text-green-600">
+                                  Text File • {(message.file.metadata.size / 1024).toFixed(1)} KB
+                                </p>
+                              </div>
+                              <ExternalLink className="w-4 h-4 text-green-600" />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Generic File Fallback */}
+                        {message.file.metadata?.type && 
+                        !message.file.metadata.type.startsWith('image/') && 
+                        message.file.metadata.type !== 'application/pdf' && 
+                        !message.file.metadata.type.startsWith('text/') && 
+                        !message.file.fileName?.match(/\.(txt|md|json|js|ts|jsx|tsx|css|html|xml|csv)$/i) && (
+                          <div className="space-y-2 w-[300px]">
+                            <div 
+                              className="flex items-center space-x-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+                              onClick={() => window.open(message?.file?.fileUrl, '_blank')}
+                            >
+                              <div className="flex-shrink-0">
+                                <Paperclip className="w-8 h-8 text-gray-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">
+                                  {message.file.fileName}
+                                </p>
+                                <p className="text-xs text-gray-600">
+                                  {message.file.metadata.type} • {(message.file.metadata.size / 1024).toFixed(1)} KB
+                                </p>
+                              </div>
+                              <ExternalLink className="w-4 h-4 text-gray-600" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Document Section (existing) */}
                     {message.document && (
                       <div className="mt-2 pt-2 border-t border-gray-600 flex items-center space-x-2 text-xs text-gray-300">
                         <FileText className="w-3 h-3" />
@@ -219,7 +325,6 @@ export default function Chat() {
                 </div>
               </div>
             ))}
-            
             {isLoading && (
               <div className="flex items-start space-x-3">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
@@ -232,7 +337,6 @@ export default function Chat() {
                       <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
                       <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                     </div>
-                    <span className="text-sm">Creating document for you...</span>
                   </div>
                 </div>
               </div>
@@ -252,24 +356,8 @@ export default function Chat() {
           </div>
 
           {/* Input Form */}
-          <div className="p-4 sticky bottom-10 rounded-3xl bg-[#1B2535] border border-blue-500">
-            <form onSubmit={handleSubmit} className="flex space-x-3">
-              <input
-                className="flex-1 bg-gray-800 text-gray-100 px-4 py-3 rounded-xl border border-gray-600 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
-                value={input}
-                placeholder="Ask me to create a document..."
-                onChange={e => setInput(e.currentTarget.value)}
-                disabled={isLoading}
-              />
-              <button
-                type="submit"
-                disabled={isLoading || !input.trim()}
-                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center space-x-2"
-              >
-                <span>Send</span>
-                <Sparkles className="w-4 h-4" />
-              </button>
-            </form>
+          <div className="sticky bottom-5 mx-10">
+          <FloatingDock input={input} onSubmit={handleSubmit} isLoading={isLoading} setInput={setInput} selectedModel={selectedModel} onModelChange={setSelectedModel} uploadedFile={uploadedFile} onFileUpload={setUploadedFile} onFileRemove={handleFileRemove} />
           </div>
         </div>
       </div>
@@ -289,10 +377,10 @@ export default function Chat() {
                   {getActiveDocument()?.extra && (
                     <div className="flex items-center space-x-4 mt-1 text-sm text-gray-400">
                       {getActiveDocument()?.extra?.estimatedReadTime && (
-                        <span>{getActiveDocument()?.extra?.estimatedReadTime}</span>
-                      )}
-                      {getActiveDocument()?.extra?.wordCount && (
-                        <span>{getActiveDocument()?.extra?.wordCount} words</span>
+                        <div className='flex'>
+                        <span className='font-bold pr-2'>Estimated Reading Time :</span>
+                        <span> {getActiveDocument()?.extra?.estimatedReadTime}</span>
+                        </div>
                       )}
                     </div>
                   )}

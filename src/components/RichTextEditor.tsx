@@ -20,13 +20,25 @@ import {
   MdFormatQuote as Quote,
 } from 'react-icons/md';
 
-import {   RiH1 as Heading1,
+import { 
+  RiH1 as Heading1,
   RiH2 as Heading2,
-  RiH3 as Heading3} from 'react-icons/ri'
+  RiH3 as Heading3
+} from 'react-icons/ri';
 
 type Props = {
   input: string;
   setInput: (newValue: string) => void;
+};
+
+// Function to count characters in HTML content (excluding HTML tags)
+const countTextCharacters = (html: string): number => {
+  // Remove HTML tags using regex
+  const text = html.replace(/<[^>]*>/g, '');
+  // Decode HTML entities and return character count
+  const temp = document.createElement('textarea');
+  temp.innerHTML = text;
+  return temp.value.length;
 };
 
 const BUTTONS = [
@@ -91,7 +103,7 @@ const BUTTONS = [
     feature: 'bulletList',
     isActive: (editor: Editor) => editor.isActive('bulletList'),
     enable: (editor: Editor) => editor.chain().focus().toggleBulletList().run(),
-    disable: (editor: Editor) => editor.chain().focus().toggleBulletList().run(),
+    disable: (editor: Editor) => editor.chain().focus().setParagraph().run(),
     title: "Bullet List",
   },
   {
@@ -99,23 +111,23 @@ const BUTTONS = [
     feature: 'orderedList',
     isActive: (editor: Editor) => editor.isActive('orderedList'),
     enable: (editor: Editor) => editor.chain().focus().toggleOrderedList().run(),
-    disable: (editor: Editor) => editor.chain().focus().toggleOrderedList().run(),
+    disable: (editor: Editor) => editor.chain().focus().setParagraph().run(),
     title: "Ordered List",
   },
   {
     icon: Quote,
     feature: 'blockquote',
     isActive: (editor: Editor) => editor.isActive('blockquote'),
-    enable: (editor: Editor) => editor.chain().focus().toggleBlockquote().run(),
-    disable: (editor: Editor) => editor.chain().focus().toggleBlockquote().run(),
+    enable: (editor: Editor) => editor.chain().focus().setBlockquote().run(),
+    disable: (editor: Editor) => editor.chain().focus().setParagraph().run(),
     title: "Blockquote",
   },
   {
     icon: Code,
     feature: 'codeBlock',
     isActive: (editor: Editor) => editor.isActive('codeBlock'),
-    enable: (editor: Editor) => editor.chain().focus().toggleCodeBlock().run(),
-    disable: (editor: Editor) => editor.chain().focus().toggleCodeBlock().run(),
+    enable: (editor: Editor) => editor.chain().focus().setCodeBlock().run(),
+    disable: (editor: Editor) => editor.chain().focus().setParagraph().run(),
     title: "Code Block",
   },
   {
@@ -138,6 +150,7 @@ const BUTTONS = [
 
 export const RichTextEditor: React.FC<Props> = ({ input, setInput }) => {
   const [stickyFeature, setStickyFeature] = useState<string | null>(null);
+  const [characterCount, setCharacterCount] = useState(0);
 
   // Ref to scrollable editor main area
   const mainRef = useRef<HTMLDivElement>(null);
@@ -160,9 +173,11 @@ export const RichTextEditor: React.FC<Props> = ({ input, setInput }) => {
         autoCapitalize: 'sentences'
       },
     },
-    immediatelyRender : false,
+    immediatelyRender: false,
     onUpdate({ editor }) {
-      setInput(editor.getHTML());
+      const htmlContent = editor.getHTML();
+      setInput(htmlContent);
+      setCharacterCount(countTextCharacters(htmlContent));
     },
     autofocus: true,
   });
@@ -175,12 +190,18 @@ export const RichTextEditor: React.FC<Props> = ({ input, setInput }) => {
     button.enable(editor);
   }, [editor, stickyFeature]);
 
-  // Update editor content if input changes from outside
+  // Update editor content and character count if input changes from outside
   useEffect(() => {
     if (editor && editor.getHTML() !== input) {
       editor.commands.setContent(input);
+      setCharacterCount(countTextCharacters(input));
     }
   }, [input, editor]);
+
+  // Initialize character count on mount
+  useEffect(() => {
+    setCharacterCount(countTextCharacters(input));
+  }, [input]);
 
   // Reset sticky feature when editor loses focus
   useEffect(() => {
@@ -211,6 +232,7 @@ export const RichTextEditor: React.FC<Props> = ({ input, setInput }) => {
           setStickyFeature={setStickyFeature}
         />
       </div>
+      
       {/* MAIN (SCROLLABLE) */}
       <div
         ref={mainRef}
@@ -219,6 +241,14 @@ export const RichTextEditor: React.FC<Props> = ({ input, setInput }) => {
       >
         <EditorContent editor={editor} />
       </div>
+      
+      {/* FOOTER */}
+      <div className="tiptap-footer border-t border-zinc-800 px-4 py-2 bg-zinc-900 flex-shrink-0">
+        <div className="text-sm text-zinc-400 text-right">
+          {characterCount} characters
+        </div>
+      </div>
+      
       <style>{`
         .tiptap-editor p, .tiptap-editor ul, .tiptap-editor ol, .tiptap-editor blockquote, .tiptap-editor pre, .tiptap-editor h1, .tiptap-editor h2, .tiptap-editor h3 {
           margin: 0;
@@ -265,13 +295,23 @@ function MenuBar({
     <div className="flex flex-wrap gap-1">
       {BUTTONS.map(({ icon: Icon, isActive, feature, enable, disable, title }) => {
         const currentlyActive = stickyFeature === feature;
+        const editorActive = isActive(editor);
+        
         return (
           <button
             key={title}
             onMouseDown={e => {
               e.preventDefault();
               if (!editor) return;
-              if (currentlyActive) {
+              
+              // For undo/redo, just execute the command
+              if (feature === 'undo' || feature === 'redo') {
+                enable(editor);
+                return;
+              }
+              
+              // For other formatting, check if currently active and toggle appropriately
+              if (currentlyActive || editorActive) {
                 // Turn off sticky and formatting
                 setStickyFeature?.(null);
                 disable(editor);
@@ -281,11 +321,11 @@ function MenuBar({
                 enable(editor);
               }
             }}
-            className={`${base} group ${currentlyActive || isActive(editor) ? active : inactive}`}
+            className={`${base} group ${currentlyActive || editorActive ? active : inactive}`}
             title={title}
             type="button"
           >
-            <Icon className={`${icon} ${currentlyActive || isActive(editor) ? iconActive : iconInactive}`} />
+            <Icon className={`${icon} ${currentlyActive || editorActive ? iconActive : iconInactive}`} />
           </button>
         );
       })}
