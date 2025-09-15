@@ -1,5 +1,3 @@
-import { string, stringFormat } from "zod";
-
 export interface UploadedFile {
   fileName: string;
   fileUrl: string;
@@ -33,16 +31,30 @@ export interface FloatingDockProps {
 
 export interface Message {
   id: string;
-  role: string;
+  session_id: string;
+  role: 'user' | 'assistant';
   content: string;
-  file?: UploadedFile,
   document?: {
-    title?: string;
+    title: string;
     content: string;
     extra?: {
+      wordCount?: number;
       estimatedReadTime?: string;
       tags?: string[];
       category?: string;
     };
   };
+  file_data?: UploadedFile;
+  created_at: string;
 }
+
+
+
+export interface ChatSession {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+

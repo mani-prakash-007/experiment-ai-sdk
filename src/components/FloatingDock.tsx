@@ -20,7 +20,6 @@ const MODEL_OPTIONS: { [key: string]: ModelOption[] } = {
   'Google': [
     { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
     { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", provider: "Google" },
-    { id: "gemini-1.0-ultra", name: "Gemini 1.0 Ultra", provider: "Google" },
   ],
   // 'Claude': [
   //   { id: "claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic" },
@@ -281,8 +280,6 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
             if (onFileUpload) {
               onFileUpload(newFile);
             }
-
-            console.log('File uploaded successfully:', newFile);
             toast.success('File uploaded')
 
           } catch (error) {

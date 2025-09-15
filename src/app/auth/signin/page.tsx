@@ -14,7 +14,7 @@ export default function LoginForm() {
     try {
       await signInWithGitlab()
     } catch (err) {
-      console.log('Signin Error : ', err)
+      console.error('Signin Error : ', err)
     }
   }
 
