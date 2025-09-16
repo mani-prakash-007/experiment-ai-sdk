@@ -237,7 +237,6 @@ export const RichTextDocumentEditor: React.FC<Props> = ({ value, onSave, onClose
     onSave(updatedDoc);
     setEditable(false);
     setPristine(updatedDoc);
-    toast.success('Changes saved & switched to reading mode');
   };
 
   const handleDiscard = () => {
@@ -322,7 +321,7 @@ export const RichTextDocumentEditor: React.FC<Props> = ({ value, onSave, onClose
                   onClick={handleSave}
                   disabled={!hasUnsaved}
                   className={`px-3 py-2 text-white rounded-lg transition-colors flex items-center space-x-2 text-sm ${
-                    hasUnsaved ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 cursor-not-allowed opacity-60'
+                    hasUnsaved ? 'bg-green-600 hover:bg-green-700 cursor-pointer' : 'bg-gray-600 cursor-not-allowed opacity-60'
                   }`}
                   type="button"
                 >
@@ -333,7 +332,7 @@ export const RichTextDocumentEditor: React.FC<Props> = ({ value, onSave, onClose
                   onClick={handleDiscard}
                   disabled={!hasUnsaved}
                   className={`px-3 py-2 rounded-lg text-white text-sm transition-colors ${
-                    hasUnsaved ? 'bg-yellow-700 hover:bg-yellow-800' : 'bg-gray-600 cursor-not-allowed opacity-60'
+                    hasUnsaved ? 'bg-red-700 hover:bg-red-800 cursor-pointer' : 'bg-gray-600 cursor-not-allowed opacity-60'
                   }`}
                   type="button"
                 >
@@ -371,12 +370,12 @@ export const RichTextDocumentEditor: React.FC<Props> = ({ value, onSave, onClose
               #{tag}
               {editable && (
                 <button
-                  className="ml-1"
+                  className="ml-1 cursor-pointer active:scale-90"
                   style={{ lineHeight: 0 }}
                   onClick={() => handleTagRemove(tag)}
                   title="Remove"
                 >
-                  <TagRemove className="w-3 h-3" />
+                  <TagRemove className="w-3 h-3 " />
                 </button>
               )}
             </span>
@@ -392,13 +391,13 @@ export const RichTextDocumentEditor: React.FC<Props> = ({ value, onSave, onClose
                 spellCheck={false}
               />
               <button
-                className="ml-1 px-2 py-1 bg-indigo-700 hover:bg-indigo-800 text-white rounded-full text-xs"
+                className="ml-1 px-2 py-1 bg-indigo-700 hover:bg-indigo-800 text-white rounded-full text-xs cursor-pointer active:scale-90"
                 title="Add tag"
                 onClick={handleTagAdd}
                 disabled={!newTag.trim()}
                 type="button"
               >
-                <Add className="w-3 h-3" />
+                <Add className="w-3 h-3 " />
               </button>
             </>
           )}
@@ -411,9 +410,12 @@ export const RichTextDocumentEditor: React.FC<Props> = ({ value, onSave, onClose
 
       {/* Rich Text Editor Scrollable Main */}
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="bg-zinc-900 border-b border-zinc-800 px-4 py-2">
-          <MenuBar editor={editor} editable={editable} />
-        </div>
+          {
+            editable && 
+            <div className="bg-zinc-900 border-b border-zinc-800 px-4 py-2">
+               <MenuBar editor={editor} editable={editable} />
+            </div>
+          }
         {/* Only this div scrolls! */}
         <div className={`${editable ? '' : 'select-text'} px-4 pt-6 pb-2 flex-1 min-h-0 overflow-y-auto`}>
           <EditorContent editor={editor} />
@@ -422,7 +424,12 @@ export const RichTextDocumentEditor: React.FC<Props> = ({ value, onSave, onClose
           <div className="flex justify-between items-center text-sm text-zinc-400">
             <div>
               {!editable && <span className="italic text-zinc-400">Read mode</span>}
-              {editable && hasUnsaved && <span className="text-yellow-400">● Unsaved changes</span>}
+              {editable && hasUnsaved && (
+                <span className="text-yellow-300 flex items-center animate-pulse">
+                   <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-300 mr-2" />
+                   Unsaved changes
+                </span>
+              )}
             </div>
           </div>
         </div>

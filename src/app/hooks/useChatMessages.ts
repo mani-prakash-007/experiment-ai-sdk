@@ -72,11 +72,13 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
   }, [sessionId, supabase]);
 
   const updateMessage = useCallback(async (messageId: string, updates: Partial<Message>) => {
+    console.log('Updates (Hook) : ', JSON.stringify(updates, null,2))
     try {
       const { error } = await supabase
         .from('messages')
         .update(updates)
-        .eq('id', messageId);
+        .eq('id', messageId)
+        .select();
       if (error) throw error;
       setMessages(prev => 
         prev.map(m => m.id === messageId ? { ...m, ...updates } : m)
@@ -86,7 +88,6 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
       toast.error('Message updation failed')
     }
   }, [supabase]);
-
   // Clear ALL message state before fetching for new session 
 
     useEffect(() => {

@@ -297,23 +297,19 @@ export default function Chat() {
     setIsEditorOpen(false);
     setActiveDocumentId(null);
   };
-  const updateDocument = () => {
+  const updateDocument = ( documentContent: EditorDocumentContent) => {
     if (activeDocumentId) {
       const message = messages.find(m => m.id === activeDocumentId);
       if (message?.document) {
         updateMessage(activeDocumentId, {
-          document: { ...message.document, content: editorContent }
+          document: documentContent
         });
-        alert('Document updated successfully');
+        toast.success('Document Saved')
       }
     }
   };
   const getActiveDocument = () =>
     messages.find(msg => msg.id === activeDocumentId)?.document;
-
-  console.log("getActiveDocument : ", JSON.stringify(getActiveDocument(), null, 2))
-  console.log("activeDocumentId : " , activeDocumentId)
-  console.log("messages : " , messages)
 
   if (authLoading) {
     return (
@@ -594,7 +590,7 @@ export default function Chat() {
           {getActiveDocument() && (
             <RichTextEditor
               value={getActiveDocument() as EditorDocumentContent}
-              onSave={()=> {}}
+              onSave={updateDocument}
               onClose={closeEditor}
             />
           )}
