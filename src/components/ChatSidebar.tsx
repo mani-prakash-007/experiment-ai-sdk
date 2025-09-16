@@ -26,16 +26,38 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - date.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const date = new Date(dateString);
+  const now = new Date();
 
-    if (diffDays === 1) return 'Today';
-    if (diffDays === 2) return 'Yesterday';
-    if (diffDays <= 7) return `${diffDays - 1} days ago`;
-    return date.toLocaleDateString();
-  };
+  // Normalize to midnight for day difference
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const startOfNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const diffTime = startOfNow.getTime() - startOfDate.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  // Format time in IST
+  const timeInIST = date.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  if (diffDays === 0) return `Today, ${timeInIST}`;
+  if (diffDays === 1) return `Yesterday, ${timeInIST}`;
+  if (diffDays < 7) return `${diffDays} days ago, ${timeInIST}`;
+
+  return date.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
 
   // Filter sessions based on search term
   const filteredSessions = useMemo(() => {
@@ -132,7 +154,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           </div>
 
           {/* Sessions List */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto mb-14">
             {loading ? (
               <div className="p-4 text-center text-gray-400">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-2"></div>
@@ -207,6 +229,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 ))}
               </div>
             )}
+          </div>
+          <div className='h-14 border-t border-gray-600 fixed bottom-0 w-full'>
+            
           </div>
         </div>
       </div>

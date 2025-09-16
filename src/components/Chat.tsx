@@ -30,6 +30,16 @@ const CanvasDocumentSchema = z.object({
   }).optional(),
 });
 
+type EditorDocumentContent = {
+  title: string;
+  extra: {
+    estimatedReadTime?: string;
+    category?: string;
+    tags?: string[];
+  };
+  content: string;
+};
+
 const cleanExtraObject = (extra: any) => {
   if (!extra) return undefined;
   return {
@@ -83,6 +93,7 @@ export default function Chat() {
     api: '/api/chat',
     schema: CanvasDocumentSchema,
   });
+
 
   // Auto-select first session after login/sessions loaded
   useEffect(() => {
@@ -188,7 +199,6 @@ export default function Chat() {
     }
   }, [messages, scrollToBottom]);
 
-  // ========== SUBMIT MESSAGE =============
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !activeSessionId || messagesLoading) return;
@@ -228,11 +238,11 @@ export default function Chat() {
         file: msg.file_data
       }));
     }
-    aiSubmittedSession.current = activeSessionId; // Mark which session triggers the AI!
+    aiSubmittedSession.current = activeSessionId;
     submit({ messages: contextToSend, model: selectedModel });
   };
 
-  // ========== ASSISTANT (AI) RESPONSE SESSION SAFE ==========
+  //ASSISTANT (AI) RESPONSE SESSION SAFE
   useEffect(() => {
     // Only add AI response if it belongs to the session that submitted
     if (
@@ -301,6 +311,10 @@ export default function Chat() {
   const getActiveDocument = () =>
     messages.find(msg => msg.id === activeDocumentId)?.document;
 
+  console.log("getActiveDocument : ", JSON.stringify(getActiveDocument(), null, 2))
+  console.log("activeDocumentId : " , activeDocumentId)
+  console.log("messages : " , messages)
+
   if (authLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
@@ -311,22 +325,8 @@ export default function Chat() {
       </div>
     );
   }
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-        <div className="text-center text-gray-400">
-          <Sparkles className="w-16 h-16 mx-auto mb-4 opacity-50" />
-          <h1 className="text-2xl font-bold mb-2 text-white">Welcome to AI Canvas Chat</h1>
-          <p className="mb-4">Please sign in to access the chat functionality.</p>
-          <div className="text-sm opacity-75">
-            Your authentication is handled by the application middleware.
-          </div>
-        </div>
-      </div>
-    );
-  }
   return (
-    <div className="flex w-screen h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="flex w-screen h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 fixed">
       <ChatSidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -358,7 +358,7 @@ export default function Chat() {
         {activeSessionId ? (
           <div 
             ref={containerRef}
-            className={`h-full ${!isEditorOpen && 'max-w-4xl mx-auto w-full'} flex flex-col justify-between overflow-y-auto relative`}
+            className={`h-full ${!isEditorOpen && 'max-w-4xl mx-auto w-full'} flex flex-col justify-between overflow-y-auto relative pt-14`}
           >
             <div className="p-4 space-y-4 mb-5">
               {hasMore && messages.length > 0 && (
@@ -523,7 +523,6 @@ export default function Chat() {
                         <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
                         <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                       </div>
-                      <span className="text-sm text-gray-300">AI is thinking...</span>
                     </div>
                   </div>
                 </div>
@@ -589,71 +588,17 @@ export default function Chat() {
           </div>
         )}
       </div>
-      <div className={`flex flex-col transition-all duration-500 ease-in-out bg-gray-900 ${
-        isEditorOpen ? 'w-1/2 opacity-100 translate-x-0' : 'w-0 opacity-0 translate-x-full overflow-hidden'
-      }`}>
-        {isEditorOpen && getActiveDocument() && (
-          <>
-            <div className="bg-gray-800/50 backdrop-blur-sm border-b border-gray-700 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <h2 className="text-lg font-bold text-white">
-                    {getActiveDocument()?.title || 'Untitled Document'}
-                  </h2>
-                  {getActiveDocument()?.extra && (
-                    <div className="flex items-center space-x-4 mt-1 text-sm text-gray-400">
-                      {getActiveDocument()?.extra?.estimatedReadTime && (
-                        <div className='flex'>
-                          <span className='font-bold pr-2'>Reading Time:</span>
-                          <span>{getActiveDocument()?.extra?.estimatedReadTime}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={updateDocument}
-                    className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center space-x-2 text-sm"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>Save</span>
-                  </button>
-                  <button
-                    onClick={closeEditor}
-                    className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-              {getActiveDocument()?.extra && (getActiveDocument()?.extra?.tags || getActiveDocument()?.extra?.category) && (
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {getActiveDocument()?.extra?.category && (
-                    <span className="px-2 py-1 bg-blue-600 text-blue-100 text-xs rounded-full">
-                      {getActiveDocument()?.extra?.category}
-                    </span>
-                  )}
-                  {getActiveDocument()?.extra?.tags?.map((tag, index) => (
-                    <span
-                      key={index}
-                      className="px-2 py-1 bg-gray-700 text-gray-300 text-xs rounded-full"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <RichTextEditor
-                input={editorContent}
-                setInput={setEditorContent}
-              />
-            </div>
-          </>
-        )}
-      </div>
+        <div className={`flex flex-col transition-all duration-500 ease-in-out border border-gray-600 rounded-lg bg-gray-900 ${
+          isEditorOpen ? 'w-1/2 opacity-100 translate-x-0' : 'w-0 opacity-0 translate-x-full overflow-hidden'
+        }`}>
+          {getActiveDocument() && (
+            <RichTextEditor
+              value={getActiveDocument() as EditorDocumentContent}
+              onSave={()=> {}}
+              onClose={closeEditor}
+            />
+          )}
+        </div>
     </div>
   );
 }

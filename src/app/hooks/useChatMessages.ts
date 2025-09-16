@@ -88,17 +88,24 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
   }, [supabase]);
 
   // Clear ALL message state before fetching for new session 
-  useEffect(() => {
-    if (sessionId) {
+
+    useEffect(() => {
+      if (!sessionId) {
+        setMessages([]);
+        return;
+      }
+
       setMessages([]);
       setPage(0);
       setHasMore(true);
-      // Now fetch
-      fetchMessages(0, true);
-    } else {
-      setMessages([]);
-    }
-  }, [sessionId, fetchMessages]);
+
+      // Debounce fetching when session changes
+      const handler = setTimeout(() => {
+        fetchMessages(0, true);
+      }, 500);
+
+      return () => clearTimeout(handler);
+    }, [sessionId, fetchMessages]);
 
   return {
     messages,
