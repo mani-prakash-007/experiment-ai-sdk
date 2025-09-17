@@ -207,8 +207,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   <div
                     key={session.id}
                     className={`
-                      group flex items-center p-3 rounded-lg cursor-pointer transition-all duration-200
-                      transform hover:scale-[1.02] hover:shadow-md
+                      group flex items-center p-3 rounded-lg cursor-pointer transition-all duration-500
+                      transform hover:scale-[1.05] hover:shadow-md
                       ${activeSessionId === session.id 
                         ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg scale-[1.01]' 
                         : 'text-gray-300 hover:bg-gray-800 hover:text-white'
@@ -255,7 +255,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               {/* Trigger */}
               <button
                 onClick={() => setOpen(!open)}
-                className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 focus:outline-none h-full w-full px-4"
+                className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 focus:outline-none h-full w-full px-4 cursor-pointer"
               >
                 {user?.user_metadata?.avatar_url ? (
                   <img src={user?.user_metadata?.avatar_url} alt="avatar" className="w-10 h-10 rounded-full" />

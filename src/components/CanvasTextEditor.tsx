@@ -419,7 +419,7 @@ const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose, isStreaming
             {onClose && (
               <button
                 onClick={onClose}
-                className="p-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                className="p-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg cursor-pointer"
                 type="button"
               >
                 <X className="w-5 h-5" />

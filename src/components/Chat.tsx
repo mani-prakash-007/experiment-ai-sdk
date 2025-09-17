@@ -94,6 +94,17 @@ export default function Chat() {
     schema: CanvasDocumentSchema,
   });
 
+  //Animation on Straming response 
+  const words = ["Thinking 🤔", "Analyzing 🧠", "Generating ✨", "Responding 🤖"];
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % words.length);
+    }, 1000); // switch word every 1.5s
+    return () => clearInterval(interval);
+  }, []);
+
   // Always clear all session-specific state BEFORE switching session
   const clearSessionState = () => {
     setInput('');
@@ -218,19 +229,23 @@ export default function Chat() {
     submit({ messages: contextToSend, model: selectedModel });
   };
 
+  useEffect(()=>{
+    setTimeout(()=>{
+      scrollToBottom()
+    }, 2000)
+  }, [activeSessionId])
+
   // DOC View Logic
   const openDocument = (messageId: string, document: Message['document']) => {
     if (document) {
       setIsEditorOpen(true);
       setActiveDocumentId(messageId);
-      scrollToBottom()
     }
   };
 
   const closeEditor = () => {
     setIsEditorOpen(false);
     setActiveDocumentId(null);
-    scrollToBottom()
   };
 
   const updateDocument = (documentContent: EditorDocumentContent) => {
@@ -256,12 +271,6 @@ export default function Chat() {
     }
   }, [handleScroll]);
 
-  useEffect(() => {
-    if (messages.length > 0) {
-      scrollToBottom();
-    }
-  }, [messages, scrollToBottom, isEditorOpen]);
-
   // STREAMING AI RESPONSE - Open editor immediately and stream content
   useEffect(() => {
     if (
@@ -270,6 +279,7 @@ export default function Chat() {
       (isLoading || object?.general)
     ) {
       // Open editor immediately when streaming starts
+      scrollToBottom()
       if (isLoading && !streamingMessageId) {
         const aiMessage: Omit<Message, 'id' | 'created_at'> = {
           session_id: activeSessionId,
@@ -286,7 +296,6 @@ export default function Chat() {
           if (addedMessage) {
             setActiveDocumentId(addedMessage.id);
             setStreamingMessageId(addedMessage.id);
-            setIsEditorOpen(true);
           }
         });
       }
@@ -296,6 +305,10 @@ export default function Chat() {
         const currentContent = object?.general || '';
         const currentDocumentContent = object?.document || '';
         const currentTitle = object?.title || 'Generating Document...';
+        
+        if(currentDocumentContent){
+          setIsEditorOpen(true)
+        }
         
         updateMessage(streamingMessageId, {
           content: currentContent,
@@ -402,7 +415,7 @@ export default function Chat() {
                       <Bot className="w-4 h-4 text-white" />
                     )}
                   </div>
-                  <div className={`flex-1 max-w-[80%] ${message.role === 'user' ? 'flex justify-end' : ''}`}>
+                  <div className={`flex-1 max-w-[80%] w-full ${message.role === 'user' ? 'flex justify-end' : ''}`}>
                     <div
                       className={`rounded-2xl px-4 py-3 shadow-sm ${
                         message.role === 'user'
@@ -412,7 +425,26 @@ export default function Chat() {
                       onClick={() => message.document && openDocument(message.id, message.document)}
                     >
                       <div className="prose prose-invert max-w-none text-sm leading-relaxed">
-                        {message?.content ? message?.content : 'Generating Document 📄' }
+                        {message?.content ? (
+                          message.content
+                        ) : (
+                            <div className="flex items-center space-x-2">
+                              {/* animated word */}
+                              <span
+                                key={words[index]}
+                                className="text-sm text-gray-300 transition-opacity duration-500 ease-in-out"
+                              >
+                                {words[index]}
+                              </span>
+
+                              {/* typing dots */}
+                              <div className="flex space-x-1">
+                                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse [animation-delay:0ms]" />
+                                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse [animation-delay:200ms]" />
+                                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse [animation-delay:400ms]" />
+                              </div>
+                            </div>
+                        )}
                       </div>
                       {message.file_data && (
                         <div className="mt-3 pt-2">
@@ -506,7 +538,7 @@ export default function Chat() {
                           )}
                         </div>
                       )}
-                      {message.document && (
+                      {message?.document?.content && (
                         <div className="mt-2 pt-2 border-t border-gray-600 flex items-center space-x-2 text-xs text-gray-300">
                           <FileText className="w-3 h-3" />
                           <span>Click to view document: {message.document.title || 'Untitled Document'}</span>
