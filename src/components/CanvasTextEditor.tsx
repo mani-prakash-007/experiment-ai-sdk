@@ -40,24 +40,28 @@ type EditorDocumentContent = {
   };
   content: string;
 };
+
 type Props = {
   value: EditorDocumentContent;
   onSave: (newValue: EditorDocumentContent) => void;
   onClose?: () => void;
+  isStreaming?: boolean;
 };
 
 function estimateReadingTime(html: string): string {
   const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
   const words = text.trim().split(' ').filter(Boolean).length;
-  const minutes = Math.ceil(words / 200);
+  const minutes = Math.ceil(words / 100);
   return `${minutes || 1} minute${minutes > 1 ? 's' : ''}`;
 }
+
 function arraysEqual(a: string[] = [], b: string[] = []) {
   if (a.length !== b.length) return false;
   const sortedA = [...a].sort();
   const sortedB = [...b].sort();
   return sortedA.every((v, i) => v === sortedB[i]);
 }
+
 function isDocEdited(cur: EditorDocumentContent, orig: EditorDocumentContent) {
   return (
     cur.title !== orig.title ||
@@ -140,13 +144,13 @@ const FORMATTING_BUTTONS = [
   { icon: Quote, command: 'blockquote', title: "Blockquote" },
   { icon: Code, command: 'codeBlock', title: "Code Block" },
 ];
+
 const ACTION_BUTTONS = [
   { icon: Undo2, command: 'undo', title: "Undo", exec: (ed: Editor) => ed.chain().focus().undo().run(), canExec: (ed: Editor) => ed.can().undo() },
   { icon: Redo2, command: 'redo', title: "Redo", exec: (ed: Editor) => ed.chain().focus().redo().run(), canExec: (ed: Editor) => ed.can().redo() },
 ];
 
-const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose }) => {
-  // Store the last pristine doc when edit mode is entered
+const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose, isStreaming = false }) => {
   const [editable, setEditable] = useState(false);
   const [title, setTitle] = useState(value.title || '');
   const [category, setCategory] = useState(value.extra?.category || '');
@@ -155,22 +159,9 @@ const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose }) => {
   const [content, setContent] = useState(value.content || '');
   const [pristine, setPristine] = useState<EditorDocumentContent>(value);
   const [hasUnsaved, setHasUnsaved] = useState(false);
+  const [isStreamingActive, setIsStreamingActive] = useState(false);
 
   const estimatedReadTime = estimateReadingTime(content);
-
-  // Update pristine snapshot and editor value when doc changes (switch/readmode)
-  useEffect(() => {
-    setTitle(value.title || '');
-    setCategory(value.extra?.category || '');
-    setTags(value.extra?.tags || []);
-    setContent(value.content || '');
-    setEditable(false);
-    setPristine(value);
-    if (editor && value.content !== editor.getHTML()) {
-      editor.commands.setContent(value.content);
-    }
-    // eslint-disable-next-line
-  }, [value]);
 
   // When entering edit mode, remember pristine
   const enterEdit = () => {
@@ -188,7 +179,6 @@ const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose }) => {
       { title, extra: { category, tags }, content },
       pristine
     ));
-    // eslint-disable-next-line
   }, [title, category, tags, content, pristine]);
 
   const editor = useEditor({
@@ -216,6 +206,65 @@ const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose }) => {
     },
     immediatelyRender: false
   });
+
+    // Handle both regular updates and streaming updates
+  useEffect(() => {
+    const isNewStreamingSession = isStreaming && !isStreamingActive;
+    const isStreamingUpdate = isStreaming && isStreamingActive;
+    const isStreamingEnd = !isStreaming && isStreamingActive;
+    
+    // Starting a new streaming session
+    if (isNewStreamingSession) {
+      setTitle(value.title || 'Generating Document...');
+      setCategory(value.extra?.category || '');
+      setTags(value.extra?.tags || []);
+      setContent(value.content || '');
+      setEditable(false);
+      setIsStreamingActive(true);
+      
+      if (editor && editor.getHTML() !== value.content) {
+        editor.commands.setContent(value.content || '');
+      }
+    }
+    // Continuing streaming updates
+    else if (isStreamingUpdate) {
+      setTitle(value.title || 'Generating Document...');
+      setCategory(value.extra?.category || '');
+      setTags(value.extra?.tags || []);
+      setContent(value.content || '');
+      
+      if (editor && editor.getHTML() !== value.content) {
+        editor.commands.setContent(value.content || '');
+      }
+    }
+    // Streaming has ended
+    else if (isStreamingEnd) {
+      setTitle(value.title || '');
+      setCategory(value.extra?.category || '');
+      setTags(value.extra?.tags || []);
+      setContent(value.content || '');
+      setIsStreamingActive(false);
+      setPristine(value);
+      
+      if (editor && editor.getHTML() !== value.content) {
+        editor.commands.setContent(value.content || '');
+      }
+    }
+    // Regular document switch (not streaming)
+    else if (!isStreaming && !isStreamingActive) {
+      setTitle(value.title || '');
+      setCategory(value.extra?.category || '');
+      setTags(value.extra?.tags || []);
+      setContent(value.content || '');
+      setEditable(false);
+      setPristine(value);
+      
+      if (editor && value.content !== editor.getHTML()) {
+        editor.commands.setContent(value.content || '');
+      }
+    }
+  }, [value, isStreaming, isStreamingActive, editor]);
+
 
   useEffect(() => {
     if (editor) {
@@ -258,15 +307,22 @@ const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose }) => {
       setNewTag('');
     }
   };
+
   const handleTagRemove = (tag: string) => {
     setTags(tags.filter(t => t !== tag));
   };
 
   const tryToggleEditable = () => {
+    if (isStreaming || isStreamingActive) {
+      toast.error('Cannot edit while document is being generated');
+      return;
+    }
+    
     if (editable && hasUnsaved) {
       toast.error('Please save or discard changes before switching to reading mode');
       return;
     }
+    
     if (editable) {
       setEditable(false);
       setTitle(pristine.title);
@@ -287,7 +343,6 @@ const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose }) => {
     <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-zinc-900 to-gray-800 rounded-xl shadow-xl border border-zinc-800">
       {/* HEADER */}
       <div className="border-b bg-gray-800/60 backdrop-blur-xl rounded-t-xl border-gray-700 p-6">
-        {/* ... (header content unchanged, see prior iterations) ... */}
         <div className="flex items-center justify-between gap-4">
           {editable ? (
             <input
@@ -298,19 +353,40 @@ const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose }) => {
               spellCheck={false}
             />
           ) : (
-            <div className="text-2xl font-extrabold text-indigo-100 tracking-wide mb-1 select-text break-words">
-              {title || "Untitled Document"}
+            <div className="flex items-center gap-3">
+              <div className="text-2xl font-extrabold text-indigo-100 tracking-wide mb-1 select-text break-words">
+                {title || "Untitled Document"}
+              </div>
+              {(isStreaming || isStreamingActive) && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-blue-600/20 border border-blue-500/30 rounded-full">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                  <span className="text-blue-300 text-sm font-medium">Generating...</span>
+                </div>
+              )}
             </div>
           )}
           <div className="flex items-center space-x-2">
             <button
               onClick={tryToggleEditable}
+              disabled={isStreaming || isStreamingActive}
               className={`flex items-center rounded-lg px-3 py-2 font-semibold text-sm transition-colors ${
-                editable
+                isStreaming || isStreamingActive
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-60'
+                  : editable
                   ? 'bg-gray-700 hover:bg-gray-800 text-white'
                   : 'bg-indigo-700 hover:bg-indigo-800 text-white'
               }`}
-              title={editable ? "Switch to Read Mode" : "Edit Document"}
+              title={
+                isStreaming || isStreamingActive 
+                  ? "Cannot edit while generating" 
+                  : editable 
+                  ? "Switch to Read Mode" 
+                  : "Edit Document"
+              }
             >
               {editable ? <ViewIcon className="w-5 h-5 mr-2" /> : <EditIcon className="w-5 h-5 mr-2" />}
               {editable ? "Read" : "Edit"}
@@ -416,20 +492,25 @@ const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose }) => {
                <MenuBar editor={editor} editable={editable} />
             </div>
           }
-        {/* Only this div scrolls! */}
         <div className={`${editable ? '' : 'select-text'} px-4 pt-6 pb-2 flex-1 min-h-0 overflow-y-auto`}>
           <EditorContent editor={editor} />
         </div>
-        <div className="border-t border-zinc-800 px-4 py-2 bg-zinc-900 rounded-b-xl shrink-0">
+        <div className="border-t border-zinc-800 px-4 py-2 bg-zinc-900 rounded-b-lg shrink-0">
           <div className="flex justify-between items-center text-sm text-zinc-400">
             <div>
-              {!editable && <span className="italic text-zinc-400">Read mode</span>}
-              {editable && hasUnsaved && (
-                <span className="text-yellow-300 flex items-center animate-pulse">
-                   <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-300 mr-2" />
-                   Unsaved changes
+              {isStreaming || isStreamingActive ? (
+                <span className="text-blue-300 flex items-center animate-pulse">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-300 mr-2" />
+                  Generating content...
                 </span>
-              )}
+              ) : !editable ? (
+                <span className="italic text-zinc-400">Read mode</span>
+              ) : editable && hasUnsaved ? (
+                <span className="text-yellow-300 flex items-center animate-pulse">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-300 mr-2" />
+                  Unsaved changes
+                </span>
+              ) : null}
             </div>
           </div>
         </div>

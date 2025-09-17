@@ -72,6 +72,7 @@ export default function Chat() {
   });
   const [uploadedFile, setUploadedFile] = useState<UploadedFile>();
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
 
   // Session-specific AI result context
   const aiSubmittedSession = useRef<string | null>(null);
@@ -99,7 +100,8 @@ export default function Chat() {
     setUploadedFile(undefined);
     setIsEditorOpen(false);
     setActiveDocumentId(null);
-    aiSubmittedSession.current = null; // Also clear pending AI trigger
+    setStreamingMessageId(null);
+    aiSubmittedSession.current = null;
   };
 
   // For new session creation
@@ -154,11 +156,9 @@ export default function Chat() {
     clearSessionState();
   }, [activeSessionId]);
 
-
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
-
 
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
@@ -218,7 +218,7 @@ export default function Chat() {
     submit({ messages: contextToSend, model: selectedModel });
   };
 
-  // ====== DOC View Logic (no change)
+  // DOC View Logic
   const openDocument = (messageId: string, document: Message['document']) => {
     if (document) {
       setIsEditorOpen(true);
@@ -226,12 +226,14 @@ export default function Chat() {
       scrollToBottom()
     }
   };
+
   const closeEditor = () => {
     setIsEditorOpen(false);
     setActiveDocumentId(null);
     scrollToBottom()
   };
-  const updateDocument = ( documentContent: EditorDocumentContent) => {
+
+  const updateDocument = (documentContent: EditorDocumentContent) => {
     if (activeDocumentId) {
       const message = messages.find(m => m.id === activeDocumentId);
       if (message?.document) {
@@ -242,9 +244,9 @@ export default function Chat() {
       }
     }
   };
+
   const getActiveDocument = () =>
     messages.find(msg => msg.id === activeDocumentId)?.document;
-
 
   useEffect(() => {
     const container = containerRef.current;
@@ -258,49 +260,60 @@ export default function Chat() {
     if (messages.length > 0) {
       scrollToBottom();
     }
-  }, [messages, scrollToBottom , isEditorOpen]);
+  }, [messages, scrollToBottom, isEditorOpen]);
 
-  //ASSISTANT (AI) RESPONSE SESSION SAFE
+  // STREAMING AI RESPONSE - Open editor immediately and stream content
   useEffect(() => {
-    // Only add AI response if it belongs to the session that submitted
     if (
-      object?.general &&
-      !isLoading &&
       activeSessionId &&
-      aiSubmittedSession.current === activeSessionId
+      aiSubmittedSession.current === activeSessionId &&
+      (isLoading || object?.general)
     ) {
-      // Prevent adding same response twice for same session
-      const recentAssistant = messages?.findLast
-        ? messages.findLast(m => m.role === 'assistant')
-        : ([...messages].reverse().find(m => m.role === 'assistant'));
-      if (
-        recentAssistant &&
-        recentAssistant.content === object.general
-      ) return;
-
-      const aiMessage: Omit<Message, 'id' | 'created_at'> = {
-        session_id: activeSessionId,
-        role: 'assistant',
-        content: object.general,
-        document: object.document
-          ? {
-              title: object.title || 'Untitled Document',
-              content: object.document,
-              extra: cleanExtraObject(object.extra),
-            }
-          : undefined,
-      };
-      addMessage(aiMessage).then((addedMessage) => {
-        if (addedMessage && object.document) {
-          setIsEditorOpen(true);
-          setActiveDocumentId(addedMessage.id);
-        }
-      });
-      // After processing, clear marker so AI reply isn't processed again
-      aiSubmittedSession.current = null;
+      // Open editor immediately when streaming starts
+      if (isLoading && !streamingMessageId) {
+        const aiMessage: Omit<Message, 'id' | 'created_at'> = {
+          session_id: activeSessionId,
+          role: 'assistant',
+          content: '',
+          document: {
+            title: 'Generating Document...',
+            content: '',
+            extra: undefined,
+          },
+        };
+        
+        addMessage(aiMessage).then((addedMessage) => {
+          if (addedMessage) {
+            setActiveDocumentId(addedMessage.id);
+            setStreamingMessageId(addedMessage.id);
+            setIsEditorOpen(true);
+          }
+        });
+      }
+      
+      // Update content during streaming
+      if (streamingMessageId && (object?.general || object?.document || object?.title)) {
+        const currentContent = object?.general || '';
+        const currentDocumentContent = object?.document || '';
+        const currentTitle = object?.title || 'Generating Document...';
+        
+        updateMessage(streamingMessageId, {
+          content: currentContent,
+          document: {
+            title: currentTitle,
+            content: currentDocumentContent,
+            extra: cleanExtraObject(object?.extra),
+          }
+        });
+      }
+      
+      // Final cleanup when streaming completes
+      if (!isLoading && object?.general && streamingMessageId) {
+        setStreamingMessageId(null);
+        aiSubmittedSession.current = null;
+      }
     }
-    // eslint-disable-next-line
-  }, [object?.general, isLoading, addMessage, messages, activeSessionId]);
+  }, [object, isLoading, addMessage, updateMessage, messages, activeSessionId, streamingMessageId, isEditorOpen]);
 
   if (authLoading) {
     return (
@@ -312,6 +325,7 @@ export default function Chat() {
       </div>
     );
   }
+
   return (
     <div className="flex w-screen h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 fixed">
       {
@@ -502,7 +516,7 @@ export default function Chat() {
                   </div>
                 </div>
               ))}
-              {isLoading && (
+              {isLoading && !streamingMessageId && (
                 <div className="flex items-start space-x-3">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
                     <Bot className="w-4 h-4 text-white" />
@@ -570,17 +584,18 @@ export default function Chat() {
           </div>
         )}
       </div>
-        <div className={`flex flex-col transition-all duration-500 ease-in-out border border-gray-600 rounded-lg bg-gray-900 ${
-          isEditorOpen ? 'w-1/2 opacity-100 translate-x-0' : 'w-0 opacity-0 translate-x-full overflow-hidden'
-        }`}>
-          {getActiveDocument() && (
-            <CanvasTextEditor
-              value={getActiveDocument() as EditorDocumentContent}
-              onSave={updateDocument}
-              onClose={closeEditor}
-            />
-          )}
-        </div>
+      <div className={`flex flex-col transition-all duration-500 ease-in-out border border-gray-600 rounded-lg bg-gray-900 ${
+        isEditorOpen ? 'w-1/2 opacity-100 translate-x-0' : 'w-0 opacity-0 translate-x-full overflow-hidden'
+      }`}>
+        {getActiveDocument() && (
+          <CanvasTextEditor
+            value={getActiveDocument() as EditorDocumentContent}
+            onSave={updateDocument}
+            onClose={closeEditor}
+            isStreaming={isLoading && streamingMessageId === activeDocumentId}
+          />
+        )}
+      </div>
     </div>
   );
 }
