@@ -1,4 +1,3 @@
-// components/FloatingDock.tsx
 import React, { useState, useRef, useEffect } from "react";
 import { 
   Loader2,  

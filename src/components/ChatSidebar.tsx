@@ -1,13 +1,16 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ChatSession } from '@/app/types/chat';
-import { MessageSquare, Trash2, X, Search, XCircle } from 'lucide-react';
+import { MessageSquare, Trash2, X, Search, XCircle, User as UserIcon, LogOut } from 'lucide-react';
+import { User } from '@supabase/supabase-js';
+import { signOut } from '@/utils/actions';
 
 interface ChatSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   sessions: ChatSession[];
+  user : User;
   activeSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete: (sessionId: string) => void;
@@ -18,12 +21,15 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   isOpen,
   onClose,
   sessions,
+  user,
   activeSessionId,
   onSessionSelect,
   onSessionDelete,
   loading
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const formatDate = (dateString: string) => {
   const date = new Date(dateString);
@@ -86,6 +92,20 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       ) : part
     );
   };
+
+    useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
 
   return (
     <>
@@ -230,8 +250,39 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               </div>
             )}
           </div>
-          <div className='h-14 border-t border-gray-600 fixed bottom-0 w-full'>
-            
+          <div className="h-14 border-t border-gray-600 fixed bottom-0 w-full bg-gray-800 flex justify-end items-center">
+            <div className='relative h-full w-full' ref={dropdownRef}>
+              {/* Trigger */}
+              <button
+                onClick={() => setOpen(!open)}
+                className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 focus:outline-none h-full w-full px-4"
+              >
+                {user?.user_metadata?.avatar_url ? (
+                  <img src={user?.user_metadata?.avatar_url} alt="avatar" className="w-10 h-10 rounded-full" />
+                ) : (
+                  <UserIcon className="w-8 h-8 text-white" />
+                )}
+                <div className="text-left text-white text-sm">
+                  <div>{user?.email}</div>
+                  <div className="text-gray-300 text-xs uppercase">{user?.app_metadata?.provider}</div>
+                </div>
+              </button>
+
+              {/* Dropdown */}
+              {open && (
+                <div className="absolute bottom-15 right-1 mt-2 w-70 bg-gray-700 border border-gray-600 rounded-md shadow-lg overflow-hidden z-50">
+                  <button
+                      onClick={async () => {
+                        await signOut();
+                        setOpen(false);
+                      }}
+                    className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-600 text-white text-sm"
+                  >
+                    <LogOut className="w-4 h-4" /> Sign Out
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

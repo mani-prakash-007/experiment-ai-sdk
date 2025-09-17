@@ -145,7 +145,7 @@ const ACTION_BUTTONS = [
   { icon: Redo2, command: 'redo', title: "Redo", exec: (ed: Editor) => ed.chain().focus().redo().run(), canExec: (ed: Editor) => ed.can().redo() },
 ];
 
-export const RichTextDocumentEditor: React.FC<Props> = ({ value, onSave, onClose }) => {
+const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose }) => {
   // Store the last pristine doc when edit mode is entered
   const [editable, setEditable] = useState(false);
   const [title, setTitle] = useState(value.title || '');
@@ -454,4 +454,4 @@ export const RichTextDocumentEditor: React.FC<Props> = ({ value, onSave, onClose
   );
 };
 
-export default RichTextDocumentEditor;
+export default CanvasTextEditor;

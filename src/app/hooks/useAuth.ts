@@ -8,23 +8,28 @@ export const useAuth = () => {
   const supabase = createClientForBrowser();
 
   useEffect(() => {
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
+    const getUserData = async () => {
+      const { data: { user },error } = await supabase.auth.getUser();
+      if (error) {
+        console.error('Error fetching user:', error);
+      }
+      setUser(user ?? null);
       setLoading(false);
     };
 
-    getSession();
+    getUserData();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
 
-    return () => subscription.unsubscribe();
-  }, [supabase.auth]);
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   return { user, loading };
 };

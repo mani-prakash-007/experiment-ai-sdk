@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { z } from 'zod';
 import {
-  User, Bot, FileText, X, Save, Sparkles, ExternalLink,
+  User, Bot, FileText, ExternalLink,
   Image as ImageIcon, Paperclip, Menu, Plus, ArrowDown, MessageSquare
 } from 'lucide-react';
 import { FloatingDock } from '@/components/FloatingDock';
@@ -16,7 +16,7 @@ import { useChatMessages } from '@/app/hooks/useChatMessages';
 import { Message, ModelOption, UploadedFile } from '@/app/types/chat';
 import { toast } from 'sonner';
 
-const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), { ssr: false });
+const CanvasTextEditor = dynamic(() => import('@/components/CanvasTextEditor'), { ssr: false });
 
 const CanvasDocumentSchema = z.object({
   title: z.string(),
@@ -65,7 +65,6 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
-  const [editorContent, setEditorContent] = useState('');
   const [selectedModel, setSelectedModel] = useState<ModelOption>({
     id: 'gemini-1.5-flash',
     name: 'Gemini 1.5 Flash',
@@ -94,21 +93,12 @@ export default function Chat() {
     schema: CanvasDocumentSchema,
   });
 
-
-  // Auto-select first session after login/sessions loaded
-  useEffect(() => {
-    if (user && !authLoading && !sessionsLoading && sessions.length > 0 && !activeSessionId) {
-      setActiveSessionId(sessions[0].id);
-    }
-  }, [user, authLoading, sessionsLoading, sessions, activeSessionId]);
-
   // Always clear all session-specific state BEFORE switching session
   const clearSessionState = () => {
     setInput('');
     setUploadedFile(undefined);
     setIsEditorOpen(false);
     setActiveDocumentId(null);
-    setEditorContent('');
     aiSubmittedSession.current = null; // Also clear pending AI trigger
   };
 
@@ -162,12 +152,14 @@ export default function Chat() {
   // Always clear editor/input/etc when session changes (extra guard)
   useEffect(() => {
     clearSessionState();
-    // eslint-disable-next-line
   }, [activeSessionId]);
+
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
+
+
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -182,22 +174,6 @@ export default function Chat() {
       }, 100);
     }
   }, [hasMore, messagesLoading, loadMoreMessages]);
-  useEffect(() => {
-    const container = containerRef.current;
-    if (container) {
-      container.addEventListener('scroll', handleScroll);
-      return () => container.removeEventListener('scroll', handleScroll);
-    }
-  }, [handleScroll]);
-  useEffect(() => {
-    const container = containerRef.current;
-    if (container && messages.length > 0) {
-      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-      if (isAtBottom) {
-        scrollToBottom();
-      }
-    }
-  }, [messages, scrollToBottom]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,6 +218,48 @@ export default function Chat() {
     submit({ messages: contextToSend, model: selectedModel });
   };
 
+  // ====== DOC View Logic (no change)
+  const openDocument = (messageId: string, document: Message['document']) => {
+    if (document) {
+      setIsEditorOpen(true);
+      setActiveDocumentId(messageId);
+      scrollToBottom()
+    }
+  };
+  const closeEditor = () => {
+    setIsEditorOpen(false);
+    setActiveDocumentId(null);
+    scrollToBottom()
+  };
+  const updateDocument = ( documentContent: EditorDocumentContent) => {
+    if (activeDocumentId) {
+      const message = messages.find(m => m.id === activeDocumentId);
+      if (message?.document) {
+        updateMessage(activeDocumentId, {
+          document: documentContent
+        });
+        toast.success('Document Saved')
+      }
+    }
+  };
+  const getActiveDocument = () =>
+    messages.find(msg => msg.id === activeDocumentId)?.document;
+
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll);
+      return () => container.removeEventListener('scroll', handleScroll);
+    }
+  }, [handleScroll]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [messages, scrollToBottom , isEditorOpen]);
+
   //ASSISTANT (AI) RESPONSE SESSION SAFE
   useEffect(() => {
     // Only add AI response if it belongs to the session that submitted
@@ -276,7 +294,6 @@ export default function Chat() {
         if (addedMessage && object.document) {
           setIsEditorOpen(true);
           setActiveDocumentId(addedMessage.id);
-          setEditorContent(object.document);
         }
       });
       // After processing, clear marker so AI reply isn't processed again
@@ -284,32 +301,6 @@ export default function Chat() {
     }
     // eslint-disable-next-line
   }, [object?.general, isLoading, addMessage, messages, activeSessionId]);
-
-  // ====== DOC View Logic (no change)
-  const openDocument = (messageId: string, document: Message['document']) => {
-    if (document) {
-      setIsEditorOpen(true);
-      setActiveDocumentId(messageId);
-      setEditorContent(document.content);
-    }
-  };
-  const closeEditor = () => {
-    setIsEditorOpen(false);
-    setActiveDocumentId(null);
-  };
-  const updateDocument = ( documentContent: EditorDocumentContent) => {
-    if (activeDocumentId) {
-      const message = messages.find(m => m.id === activeDocumentId);
-      if (message?.document) {
-        updateMessage(activeDocumentId, {
-          document: documentContent
-        });
-        toast.success('Document Saved')
-      }
-    }
-  };
-  const getActiveDocument = () =>
-    messages.find(msg => msg.id === activeDocumentId)?.document;
 
   if (authLoading) {
     return (
@@ -323,15 +314,19 @@ export default function Chat() {
   }
   return (
     <div className="flex w-screen h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 fixed">
-      <ChatSidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        sessions={sessions}
-        activeSessionId={activeSessionId}
-        onSessionSelect={handleSessionSelect}
-        onSessionDelete={handleSessionDelete}
-        loading={sessionsLoading}
+      {
+        user && 
+        <ChatSidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          sessions={sessions}
+          user={user}
+          activeSessionId={activeSessionId}
+          onSessionSelect={handleSessionSelect}
+          onSessionDelete={handleSessionDelete}
+          loading={sessionsLoading}
       />
+      }
       <div className={`h-full flex flex-col transition-all duration-500 ease-in-out
         ${isEditorOpen ? 'w-1/2' : 'w-full'}
         ${sidebarOpen ? '' : 'lg:ml-0'}`}>
@@ -354,7 +349,7 @@ export default function Chat() {
         {activeSessionId ? (
           <div 
             ref={containerRef}
-            className={`h-full ${!isEditorOpen && 'max-w-4xl mx-auto w-full'} flex flex-col justify-between overflow-y-auto relative pt-14`}
+            className={`h-full ${!isEditorOpen && 'max-w-4xl mx-auto w-full'} flex flex-col justify-between overflow-y-auto relative pt-14 `}
           >
             <div className="p-4 space-y-4 mb-5">
               {hasMore && messages.length > 0 && (
@@ -571,15 +566,6 @@ export default function Chat() {
                 <Plus className="w-5 h-5" />
                 <span>Start New Chat</span>
               </button>
-              <div className="mt-8 text-sm opacity-75">
-                <p>Features:</p>
-                <ul className="mt-2 space-y-1 text-xs">
-                  <li>• AI-generated documents with rich text editing</li>
-                  <li>• Multiple chat sessions with auto-generated titles</li>
-                  <li>• File attachments and infinite message history</li>
-                  <li>• Real-time document collaboration</li>
-                </ul>
-              </div>
             </div>
           </div>
         )}
@@ -588,7 +574,7 @@ export default function Chat() {
           isEditorOpen ? 'w-1/2 opacity-100 translate-x-0' : 'w-0 opacity-0 translate-x-full overflow-hidden'
         }`}>
           {getActiveDocument() && (
-            <RichTextEditor
+            <CanvasTextEditor
               value={getActiveDocument() as EditorDocumentContent}
               onSave={updateDocument}
               onClose={closeEditor}
