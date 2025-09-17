@@ -72,7 +72,6 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
   }, [sessionId, supabase]);
 
   const updateMessage = useCallback(async (messageId: string, updates: Partial<Message>) => {
-    console.log('Updates (Hook) : ', JSON.stringify(updates, null,2))
     try {
       const { error } = await supabase
         .from('messages')

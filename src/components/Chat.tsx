@@ -276,7 +276,7 @@ export default function Chat() {
           role: 'assistant',
           content: '',
           document: {
-            title: 'Generating Document...',
+            title: 'Generating Document 📄',
             content: '',
             extra: undefined,
           },
@@ -344,7 +344,7 @@ export default function Chat() {
       <div className={`h-full flex flex-col transition-all duration-500 ease-in-out
         ${isEditorOpen ? 'w-1/2' : 'w-full'}
         ${sidebarOpen ? '' : 'lg:ml-0'}`}>
-        <div className={`fixed z-50 flex flex-col space-y-3 ml-5 mt-2`}>
+        <div className='fixed z-50 flex flex-col space-y-3 px-5 py-2 rounded-2xl bg-gray/10 backdrop-blur-md mt-2 ml-2'>
           <button
             onClick={() => setSidebarOpen((prev) => !prev)}
             aria-label="Open Sidebar"
@@ -412,7 +412,7 @@ export default function Chat() {
                       onClick={() => message.document && openDocument(message.id, message.document)}
                     >
                       <div className="prose prose-invert max-w-none text-sm leading-relaxed">
-                        {message.content}
+                        {message?.content ? message?.content : 'Generating Document 📄' }
                       </div>
                       {message.file_data && (
                         <div className="mt-3 pt-2">
