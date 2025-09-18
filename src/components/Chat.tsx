@@ -410,7 +410,9 @@ export default function Chat() {
                       : 'bg-gradient-to-r from-purple-500 to-pink-500'
                   }`}>
                     {message.role === 'user' ? (
-                      <User className="w-4 h-4 text-white" />
+                      user?.user_metadata?.avatar_url ?  
+                      <img src={user?.user_metadata?.avatar_url} alt="avatar" className="w-full h-full rounded-full" /> :
+                      <User className="w-4 h-4 text-white" /> 
                     ) : (
                       <Bot className="w-4 h-4 text-white" />
                     )}
@@ -421,8 +423,8 @@ export default function Chat() {
                         message.role === 'user'
                           ? 'bg-blue-500 text-white rounded-br-md'
                           : 'bg-gray-800 text-gray-100 rounded-bl-md border border-gray-700'
-                      } ${message.document ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border-white/50' : ''}`}
-                      onClick={() => message.document && openDocument(message.id, message.document)}
+                      } ${message.document?.content ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border-white/50' : ''}`}
+                      onClick={() => message.document?.content && openDocument(message.id, message.document)}
                     >
                       <div className="prose prose-invert max-w-none text-sm leading-relaxed">
                         {message?.content ? (
@@ -541,7 +543,7 @@ export default function Chat() {
                       {message?.document?.content && (
                         <div className="mt-2 pt-2 border-t border-gray-600 flex items-center space-x-2 text-xs text-gray-300">
                           <FileText className="w-3 h-3" />
-                          <span>Click to view document: {message.document.title || 'Untitled Document'}</span>
+                          <span>Click to view document: <span className='italic'>"{message.document.title || 'Untitled Document'}"</span></span>
                         </div>
                       )}
                     </div>
