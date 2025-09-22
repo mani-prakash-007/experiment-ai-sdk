@@ -99,10 +99,12 @@ export default function Chat() {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setIndex((prev) => (prev + 1) % words.length);
-    }, 1000); // switch word every 1.5s
+    if(isLoading){
+      const interval = setInterval(() => {
+        setIndex((prev) => (prev + 1) % words.length);
+      }, 1000); // switch word every 1.5s
     return () => clearInterval(interval);
+  }
   }, []);
 
   // Always clear all session-specific state BEFORE switching session
