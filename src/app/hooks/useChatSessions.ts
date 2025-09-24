@@ -26,6 +26,7 @@ export const useChatSessions = (userId: string | undefined) => {
     } finally {
       setLoading(false);
     }
+    console.log('Refreshed Sessions : ',sessions)
   };
 
   useEffect(() => {

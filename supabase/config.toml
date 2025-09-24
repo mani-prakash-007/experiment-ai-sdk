@@ -342,4 +342,3 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 enabled = true
 client_id = "594dfb0bb091eab41921a239e0e6004027b3675df1475b2dd55acec12667a8c1"
 secret = "gloas-006715bb14d595e72a7742e405004fe4d3ccb6cf1abef09bb66180715d422a2c"
-redirect_uri = "http://localhost:54321/auth/v1/callback"

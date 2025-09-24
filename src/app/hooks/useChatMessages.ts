@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClientForBrowser } from '@/utils/supabase/client';
 import { Message } from '@/app/types/chat';
 import { toast } from 'sonner';
@@ -14,6 +15,7 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
   const supabase = createClientForBrowser();
+  const router = useRouter();
 
   const fetchMessages = useCallback(async (pageNum: number = 0, reset: boolean = false) => {
     if (!sessionId) return;
@@ -38,11 +40,12 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
       setPage(pageNum);
     } catch (error) {
       console.error('Error fetching messages:', error);
-      toast.error('Message retrival failed')
+      toast.error('Message retrieval failed');
+      router.push('/chat');
     } finally {
       setLoading(false);
     }
-  }, [sessionId, pageSize, supabase]);
+  }, [sessionId, pageSize, supabase, router]);
 
   const loadMoreMessages = useCallback(() => {
     if (!loading && hasMore) {
@@ -66,7 +69,7 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
       return data;
     } catch (error) {
       console.error('Error adding message:', error);
-      toast.error('Message adding failed')
+      toast.error('Message adding failed');
       return null;
     }
   }, [sessionId, supabase]);
@@ -84,28 +87,28 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
       );
     } catch (error) {
       console.error('Error updating message:', error);
-      toast.error('Message updation failed')
+      toast.error('Message updation failed');
     }
   }, [supabase]);
+
   // Clear ALL message state before fetching for new session 
-
-    useEffect(() => {
-      if (!sessionId) {
-        setMessages([]);
-        return;
-      }
-
+  useEffect(() => {
+    if (!sessionId) {
       setMessages([]);
-      setPage(0);
-      setHasMore(true);
+      return;
+    }
 
-      // Debounce fetching when session changes
-      const handler = setTimeout(() => {
-        fetchMessages(0, true);
-      }, 500);
+    setMessages([]);
+    setPage(0);
+    setHasMore(true);
 
-      return () => clearTimeout(handler);
-    }, [sessionId, fetchMessages]);
+    // Debounce fetching when session changes
+    const handler = setTimeout(() => {
+      fetchMessages(0, true);
+    }, 500);
+
+    return () => clearTimeout(handler);
+  }, [sessionId, fetchMessages]);
 
   return {
     messages,

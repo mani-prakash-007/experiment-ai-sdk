@@ -37,12 +37,21 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // 2. If user IS authenticated and tries to access auth routes → redirect to /home
+  // 2. If user is authenticated and tries to access auth routes → redirect to /chat
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone()
-    url.pathname = '/'
+    url.pathname = '/chat'
     return NextResponse.redirect(url)
   }
+
+  // 3. If user is authenticated and tries to access '/' → redirect to /chat
+  if (user && pathname === '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/chat'
+    return NextResponse.redirect(url)
+  }
+
+
 
   // Default: allow request to continue
   return supabaseResponse

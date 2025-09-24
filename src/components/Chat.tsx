@@ -4,17 +4,17 @@ import { experimental_useObject as useObject } from '@ai-sdk/react';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { z } from 'zod';
-import {
-  User, Bot, FileText, ExternalLink,
-  Image as ImageIcon, Paperclip, Menu, Plus, ArrowDown, MessageSquare
-} from 'lucide-react';
+import { ArrowDown } from 'lucide-react';
 import { FloatingDock } from '@/components/FloatingDock';
-import { ChatSidebar } from '@/components/ChatSidebar';
 import { useAuth } from '@/app/hooks/useAuth';
 import { useChatSessions } from '@/app/hooks/useChatSessions';
 import { useChatMessages } from '@/app/hooks/useChatMessages';
 import { Message, ModelOption, UploadedFile } from '@/app/types/chat';
 import { toast } from 'sonner';
+import { useParams } from 'next/navigation';
+import { ChatBubble } from '@/components/ChatBubble';
+import { WelcomeScreen } from '@/components/WelcomeScreen';
+import { notFound } from 'next/navigation';
 
 const CanvasTextEditor = dynamic(() => import('@/components/CanvasTextEditor'), { ssr: false });
 
@@ -51,17 +51,12 @@ const cleanExtraObject = (extra: any) => {
 };
 
 export default function Chat() {
-  const { user, loading: authLoading } = useAuth();
-  const {
-    sessions,
-    loading: sessionsLoading,
-    createSession,
-    deleteSession,
-    updateSessionTitle
-  } = useChatSessions(user?.id);
+  const params = useParams();
+  const activeSessionId = params.sessionId as string | null;
 
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user, loading: authLoading } = useAuth();
+  const { sessions, createSession, updateSessionTitle, refreshSessions } = useChatSessions(user?.id);
+
   const [input, setInput] = useState('');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
@@ -85,6 +80,7 @@ export default function Chat() {
     addMessage,
     updateMessage
   } = useChatMessages({ sessionId: activeSessionId });
+  
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -94,19 +90,6 @@ export default function Chat() {
     schema: CanvasDocumentSchema,
   });
 
-  //Animation on Straming response 
-  const words = ["Thinking 🤔", "Analyzing 🧠", "Generating ✨", "Responding 🤖"];
-  const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    if(isLoading){
-      const interval = setInterval(() => {
-        setIndex((prev) => (prev + 1) % words.length);
-      }, 1000); // switch word every 1.5s
-    return () => clearInterval(interval);
-  }
-  }, []);
-
   // Always clear all session-specific state BEFORE switching session
   const clearSessionState = () => {
     setInput('');
@@ -115,34 +98,6 @@ export default function Chat() {
     setActiveDocumentId(null);
     setStreamingMessageId(null);
     aiSubmittedSession.current = null;
-  };
-
-  // For new session creation
-  const handleNewSession = async () => {
-    clearSessionState();
-    const newSessionId = await createSession();
-    if (newSessionId) {
-      setActiveSessionId(newSessionId);
-    }
-    toast.success('New session created')
-  };
-
-  // For session tab selection
-  const handleSessionSelect = (sessionId: string) => {
-    if (sessionId !== activeSessionId) {
-      clearSessionState();
-      setActiveSessionId(sessionId);
-    }
-  };
-
-  const handleSessionDelete = async (sessionId: string) => {
-    await deleteSession(sessionId);
-    if (activeSessionId === sessionId) {
-      const remaining = sessions.filter(s => s.id !== sessionId);
-      clearSessionState();
-      setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
-    }
-     toast.success('Session deleted')
   };
 
   const generateSessionTitle = async (firstMessage: string) => {
@@ -231,11 +186,11 @@ export default function Chat() {
     submit({ messages: contextToSend, model: selectedModel });
   };
 
-  useEffect(()=>{
-    setTimeout(()=>{
-      scrollToBottom()
-    }, 2000)
-  }, [activeSessionId])
+  useEffect(() => {
+    setTimeout(() => {
+      scrollToBottom();
+    }, 2000);
+  }, [activeSessionId, scrollToBottom]);
 
   // DOC View Logic
   const openDocument = (messageId: string, document: Message['document']) => {
@@ -257,7 +212,7 @@ export default function Chat() {
         updateMessage(activeDocumentId, {
           document: documentContent
         });
-        toast.success('Document Saved')
+        toast.success('Document Saved');
       }
     }
   };
@@ -281,7 +236,7 @@ export default function Chat() {
       (isLoading || object?.general)
     ) {
       // Open editor immediately when streaming starts
-      scrollToBottom()
+      scrollToBottom();
       if (isLoading && !streamingMessageId) {
         const aiMessage: Omit<Message, 'id' | 'created_at'> = {
           session_id: activeSessionId,
@@ -308,8 +263,8 @@ export default function Chat() {
         const currentDocumentContent = object?.document || '';
         const currentTitle = object?.title || 'Generating Document...';
         
-        if(currentDocumentContent){
-          setIsEditorOpen(true)
+        if (currentDocumentContent) {
+          setIsEditorOpen(true);
         }
         
         updateMessage(streamingMessageId, {
@@ -328,11 +283,11 @@ export default function Chat() {
         aiSubmittedSession.current = null;
       }
     }
-  }, [object, isLoading, addMessage, updateMessage, messages, activeSessionId, streamingMessageId, isEditorOpen]);
+  }, [object, isLoading, addMessage, updateMessage, messages, activeSessionId, streamingMessageId, scrollToBottom]);
 
   if (authLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
           <p className="text-gray-400">Loading...</p>
@@ -342,288 +297,103 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex w-screen h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 fixed">
-      {
-        user && 
-        <ChatSidebar
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          sessions={sessions}
-          user={user}
-          activeSessionId={activeSessionId}
-          onSessionSelect={handleSessionSelect}
-          onSessionDelete={handleSessionDelete}
-          loading={sessionsLoading}
-      />
-      }
-      <div className={`h-full flex flex-col transition-all duration-500 ease-in-out
-        ${isEditorOpen ? 'w-1/2' : 'w-full'}
-        ${sidebarOpen ? '' : 'lg:ml-0'}`}>
-        <div className='fixed z-50 flex flex-col space-y-3 px-5 py-2 rounded-2xl bg-gray/10 backdrop-blur-md mt-2 ml-2'>
-          <button
-            onClick={() => setSidebarOpen((prev) => !prev)}
-            aria-label="Open Sidebar"
-            className="p-3 bg-gray-800/80 hover:bg-gray-700 text-white rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer active:scale-95"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <button
-            onClick={handleNewSession}
-            aria-label="New Session"
-            className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md flex items-center justify-center transition-colors cursor-pointer active:scale-95"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        </div>
+  <div className="flex h-full w-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
+    {/* 2 COLUMN FLEX */}
+    <div className={`flex flex-row h-full w-full transition-all duration-500 ease-in-out`}>
+      <div className={`flex flex-col flex-1 min-w-0 h-full`}>
         {activeSessionId ? (
           <div 
             ref={containerRef}
-            className={`h-full ${!isEditorOpen && 'max-w-4xl mx-auto w-full'} flex flex-col justify-between overflow-y-auto relative pt-14 `}
+            className="h-full w-full flex flex-col justify-between overflow-hidden"
           >
-            <div className="p-4 space-y-4 mb-5">
-              {hasMore && messages.length > 0 && (
-                <div className="text-center py-2">
-                  <button
-                    onClick={loadMoreMessages}
-                    disabled={messagesLoading}
-                    className="text-blue-400 hover:text-blue-300 text-sm px-4 py-2 rounded-lg border border-blue-400/30 hover:border-blue-300/50 transition-colors disabled:opacity-50"
-                  >
-                    {messagesLoading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400 inline-block mr-2"></div>
-                        Loading...
-                      </>
-                    ) : (
-                      'Load older messages'
-                    )}
-                  </button>
-                </div>
-              )}
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex items-start space-x-3 ${
-                    message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
-                  }`}
-                >
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    message.role === 'user' 
-                      ? 'bg-gradient-to-r from-blue-500 to-purple-600' 
-                      : 'bg-gradient-to-r from-purple-500 to-pink-500'
-                  }`}>
-                    {message.role === 'user' ? (
-                      user?.user_metadata?.avatar_url ?  
-                      <img src={user?.user_metadata?.avatar_url} alt="avatar" className="w-full h-full rounded-full" /> :
-                      <User className="w-4 h-4 text-white" /> 
-                    ) : (
-                      <Bot className="w-4 h-4 text-white" />
-                    )}
-                  </div>
-                  <div className={`flex-1 max-w-[80%] w-full ${message.role === 'user' ? 'flex justify-end' : ''}`}>
-                    <div
-                      className={`rounded-2xl px-4 py-3 shadow-sm ${
-                        message.role === 'user'
-                          ? 'bg-blue-500 text-white rounded-br-md'
-                          : 'bg-gray-800 text-gray-100 rounded-bl-md border border-gray-700'
-                      } ${message.document?.content ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border-white/50' : ''}`}
-                      onClick={() => message.document?.content && openDocument(message.id, message.document)}
+            <div className="flex-1 overflow-y-auto px-4">
+              <div className="space-y-4 pb-20 max-w-full mt-10">
+                {hasMore && messages.length > 0 && (
+                  <div className="text-center py-2">
+                    <button
+                      onClick={loadMoreMessages}
+                      disabled={messagesLoading}
+                      className="text-blue-400 hover:text-blue-300 text-sm px-4 py-2 rounded-lg border border-blue-400/30 hover:border-blue-300/50 transition-colors disabled:opacity-50"
                     >
-                      <div className="prose prose-invert max-w-none text-sm leading-relaxed">
-                        {message?.content ? (
-                          message.content
-                        ) : (
-                            <div className="flex items-center space-x-2">
-                              {/* animated word */}
-                              <span
-                                key={words[index]}
-                                className="text-sm text-gray-300 transition-opacity duration-500 ease-in-out"
-                              >
-                                {words[index]}
-                              </span>
-
-                              {/* typing dots */}
-                              <div className="flex space-x-1">
-                                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse [animation-delay:0ms]" />
-                                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse [animation-delay:200ms]" />
-                                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse [animation-delay:400ms]" />
-                              </div>
-                            </div>
-                        )}
-                      </div>
-                      {message.file_data && (
-                        <div className="mt-3 pt-2">
-                          {/* Image Files */}
-                          {message.file_data.metadata?.type?.startsWith('image/') && (
-                            <div className="space-y-2">
-                              <img 
-                                src={message.file_data.fileUrl} 
-                                alt={message.file_data.fileName}
-                                className="max-w-full h-auto rounded-lg border border-gray-300 shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
-                                style={{ maxHeight: '300px' }}
-                                onClick={() => window.open(message.file_data?.fileUrl, '_blank')}
-                              />
-                              <div className="flex items-center space-x-2 text-xs opacity-75">
-                                <ImageIcon className="w-3 h-3" />
-                                <span>{message.file_data.fileName}</span>
-                                <span>({(message.file_data.metadata.size / 1024).toFixed(1)} KB)</span>
-                              </div>
-                            </div>
-                          )}
-                          {/* PDF Files */}
-                          {message.file_data.metadata?.type === 'application/pdf' && (
-                            <div className="space-y-2 max-w-[300px]">
-                              <div 
-                                className="flex items-center space-x-3 p-3 bg-red-50 border border-red-200 rounded-lg cursor-pointer hover:bg-red-100 transition-colors w-full"
-                                onClick={() => window.open(message.file_data?.fileUrl, '_blank')}
-                              >
-                                <div className="flex-shrink-0">
-                                  <FileText className="w-8 h-8 text-red-600" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-red-900 truncate">
-                                    {message.file_data.fileName}
-                                  </p>
-                                  <p className="text-xs text-red-600">
-                                    PDF • {(message.file_data.metadata.size / 1024).toFixed(1)} KB
-                                  </p>
-                                </div>
-                                <ExternalLink className="w-4 h-4 text-red-600" />
-                              </div>
-                            </div>
-                          )}
-                          {/* Text Files */}
-                          {(message.file_data.metadata?.type?.startsWith('text/') || 
-                            message.file_data.fileName?.match(/\.(txt|md|json|js|ts|jsx|tsx|css|html|xml|csv)$/i)) && (
-                            <div className="space-y-2 max-w-[300px]">
-                              <div 
-                                className="flex items-center space-x-3 p-3 bg-green-50 border border-green-200 rounded-lg cursor-pointer hover:bg-green-100 transition-colors"
-                                onClick={() => window.open(message.file_data?.fileUrl, '_blank')}
-                              >
-                                <div className="flex-shrink-0">
-                                  <FileText className="w-8 h-8 text-green-600" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-green-900 truncate">
-                                    {message.file_data.fileName}
-                                  </p>
-                                  <p className="text-xs text-green-600">
-                                    Text File • {(message.file_data.metadata.size / 1024).toFixed(1)} KB
-                                  </p>
-                                </div>
-                                <ExternalLink className="w-4 h-4 text-green-600" />
-                              </div>
-                            </div>
-                          )}
-                          {/* Generic File Fallback */}
-                          {message.file_data.metadata?.type && 
-                          !message.file_data.metadata.type.startsWith('image/') && 
-                          message.file_data.metadata.type !== 'application/pdf' && 
-                          !message.file_data.metadata.type.startsWith('text/') && 
-                          !message.file_data.fileName?.match(/\.(txt|md|json|js|ts|jsx|tsx|css|html|xml|csv)$/i) && (
-                            <div className="space-y-2 max-w-[300px]">
-                              <div 
-                                className="flex items-center space-x-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
-                                onClick={() => window.open(message.file_data?.fileUrl, '_blank')}
-                              >
-                                <div className="flex-shrink-0">
-                                  <Paperclip className="w-8 h-8 text-gray-600" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-gray-900 truncate">
-                                    {message.file_data.fileName}
-                                  </p>
-                                  <p className="text-xs text-gray-600">
-                                    {message.file_data.metadata.type} • {(message.file_data.metadata.size / 1024).toFixed(1)} KB
-                                  </p>
-                                </div>
-                                <ExternalLink className="w-4 h-4 text-gray-600" />
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                      {messagesLoading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400 inline-block mr-2"></div>
+                          Loading...
+                        </>
+                      ) : (
+                        'Load older messages'
                       )}
-                      {message?.document?.content && (
-                        <div className="mt-2 pt-2 border-t border-gray-600 flex items-center space-x-2 text-xs text-gray-300">
-                          <FileText className="w-3 h-3" />
-                          <span>Click to view document: <span className='italic'>"{message.document.title || 'Untitled Document'}"</span></span>
-                        </div>
-                      )}
-                    </div>
+                    </button>
                   </div>
-                </div>
-              ))}
-              {isLoading && !streamingMessageId && (
-                <div className="flex items-start space-x-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
-                    <Bot className="w-4 h-4 text-white" />
+                )}
+                {messages.map((message) => (
+                  <div key={message.id} className="mx-auto max-w-[820px] w-full">
+                    <ChatBubble
+                      key={message.id}
+                      message={message}
+                      user={user}
+                      onDocumentClick={openDocument}
+                    />
                   </div>
-                  <div className="bg-gray-800 text-gray-100 rounded-2xl rounded-bl-md px-4 py-3 border border-gray-700">
-                    <div className="flex items-center space-x-2">
-                      <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                        <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                        <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                      </div>
-                    </div>
+                ))}
+                {error && (
+                  <div className="mx-auto max-w-[720px] w-full">
+                    <ChatBubble
+                      message={{
+                        id: 'error',
+                        role: 'assistant',
+                        content: error.message,
+                        session_id: activeSessionId || '',
+                        created_at: new Date().toISOString(),
+                      } as Message}
+                      user={user}
+                      onDocumentClick={openDocument}
+                      isError={true}
+                    />
                   </div>
-                </div>
-              )}
-              {error && (
-                <div className="flex items-start space-x-3">
-                  <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center">
-                    <Bot className="w-4 h-4 text-white" />
-                  </div>
-                  <div className="bg-red-900/50 text-red-100 rounded-2xl rounded-bl-md px-4 py-3 border border-red-700">
-                    <div className="text-sm font-medium">Error</div>
-                    <div className="text-sm opacity-90">{error.message}</div>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
+                )}
+                <div ref={messagesEndRef} />
+              </div>
             </div>
             {showScrollButton && (
               <button
                 onClick={scrollToBottom}
-                className="fixed bottom-20 right-10 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-colors z-30"
+                className="absolute bottom-20 right-4 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-colors z-30"
               >
                 <ArrowDown className="w-5 h-5" />
               </button>
             )}
-            <div className="sticky bottom-0 p-4">
-              <FloatingDock
-                input={input}
-                onSubmit={handleSubmit}
-                isLoading={isLoading}
-                setInput={setInput}
-                selectedModel={selectedModel}
-                onModelChange={setSelectedModel}
-                uploadedFile={uploadedFile}
-                onFileUpload={setUploadedFile}
-                onFileRemove={handleFileRemove}
-              />
+            {/* Updated FloatingDock block below */}
+            <div className="flex-shrink-0 p-4 flex justify-center bg-gradient-to-t from-gray-900 to-transparent">
+              <div className="w-full max-w-[820px]">
+                <FloatingDock
+                  input={input}
+                  onSubmit={handleSubmit}
+                  isLoading={isLoading}
+                  setInput={setInput}
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                  uploadedFile={uploadedFile}
+                  onFileUpload={setUploadedFile}
+                  onFileRemove={handleFileRemove}
+                />
+              </div>
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            <div className="text-center max-w-md mx-auto p-8">
-              <MessageSquare className="w-20 h-20 mx-auto mb-6 opacity-50" />
-              <h2 className="text-2xl font-bold text-white mb-4">Welcome to AI Canvas Chat</h2>
-              <p className="text-lg mb-6">Start a conversation with AI that can generate and edit documents in real-time.</p>
-              <button
-                onClick={handleNewSession}
-                className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors mx-auto"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Start New Chat</span>
-              </button>
-            </div>
-          </div>
+          <WelcomeScreen createSession={createSession} refreshSessions={refreshSessions}/>
         )}
       </div>
-      <div className={`flex flex-col transition-all duration-500 ease-in-out border border-gray-600 rounded-lg bg-gray-900 ${
-        isEditorOpen ? 'w-1/2 opacity-100 translate-x-0' : 'w-0 opacity-0 translate-x-full overflow-hidden'
-      }`}>
-        {getActiveDocument() && (
+      {/* CANVAS EDITOR AS SIDE COLUMN */}
+      <div
+        className={`transition-all duration-500 ease-in-out border-l border-gray-600 bg-gray-900 overflow-hidden ${
+          isEditorOpen && getActiveDocument()
+            ? "w-[clamp(350px,45vw,700px)] min-w-[350px] opacity-100"
+            : "w-0 min-w-0 opacity-0"
+        }`}
+        style={{ boxShadow: isEditorOpen ? "-2px 0 16px rgba(0,0,0,0.12)" : undefined }}
+      >
+        {isEditorOpen && getActiveDocument() && (
           <CanvasTextEditor
             value={getActiveDocument() as EditorDocumentContent}
             onSave={updateDocument}
@@ -633,5 +403,6 @@ export default function Chat() {
         )}
       </div>
     </div>
-  );
+  </div>
+);
 }
