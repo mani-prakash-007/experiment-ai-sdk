@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
+import { createPortal } from 'react-dom';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Highlight from '@tiptap/extension-highlight';
@@ -23,6 +24,8 @@ import {
   MdClose as TagRemove,
   MdEdit as EditIcon,
   MdVisibility as ViewIcon,
+  MdKeyboardArrowDown as ChevronDown,
+  MdHistory as History,
 } from 'react-icons/md';
 import {
   RiH1 as Heading1,
@@ -152,7 +155,7 @@ const ACTION_BUTTONS = [
 ];
 
 const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStreaming = false }) => {
-  const { getDocument, loading: documentLoading, error: documentError } = useDocuments();
+  const { getDocument, getDocumentVersion, getVersionMetaList, loading: documentLoading, error: documentError } = useDocuments();
   
   const [editable, setEditable] = useState(false);
   const [title, setTitle] = useState('');
@@ -169,6 +172,12 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
   const [isStreamingActive, setIsStreamingActive] = useState(false);
   const [documentNotFound, setDocumentNotFound] = useState(false);
   const [documentFetched, setDocumentFetched] = useState(false);
+  const [versions, setVersions] = useState<{ version_number: number; created_at: string; created_by: string; change_summary?: string; }[]>([]);
+  const [currentVersion, setCurrentVersion] = useState<number | null>(null);
+  const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false);
+  const [isViewingVersion, setIsViewingVersion] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; right: number } | null>(null);
+  const [dropdownButtonRef, setDropdownButtonRef] = useState<HTMLButtonElement | null>(null);
 
   const estimatedReadTime = estimateReadingTime(content);
 
@@ -252,6 +261,27 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
 
     fetchDocument();
   }, [documentId, getDocument, isStreaming, editor, documentFetched]);
+
+  // Fetch versions when document loads
+  useEffect(() => {
+    const fetchVersions = async () => {
+      if (!documentId || !documentFetched) return;
+      
+      try {
+        const versionsList = await getVersionMetaList(documentId);
+        setVersions(versionsList);
+        if (versionsList.length > 0 && currentVersion === null) {
+          // Set current version to latest (highest version number)
+          const latestVersion = Math.max(...versionsList.map(v => v.version_number));
+          setCurrentVersion(latestVersion);
+        }
+      } catch (error) {
+        console.error('Error fetching versions:', error);
+      }
+    };
+
+    fetchVersions();
+  }, [documentId, getVersionMetaList, documentFetched, currentVersion]);
 
   // Handle streaming state changes
   useEffect(() => {
@@ -413,6 +443,122 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
     }
   };
 
+  // Handle version switching
+  const switchToVersion = async (versionNumber: number) => {
+    if (versionNumber === currentVersion) return;
+    
+    if (editable && hasUnsaved) {
+      toast.error('Please save or discard changes before switching versions');
+      return;
+    }
+
+    try {
+      const isLatestVersion = versionNumber === Math.max(...versions.map(v => v.version_number));
+      
+      if (isLatestVersion) {
+        // Switch to live/latest version
+        const doc = await getDocument(documentId);
+        if (doc) {
+          setTitle(doc.title || '');
+          setCategory(doc.extra?.category || '');
+          setTags(doc.extra?.tags || []);
+          setContent(doc.content || '');
+          
+          const documentContent = {
+            title: doc.title || '',
+            content: doc.content || '',
+            extra: {
+              estimatedReadTime: doc.extra?.estimatedReadTime,
+              category: doc.extra?.category,
+              tags: doc.extra?.tags
+            }
+          };
+          setPristine(documentContent);
+          
+          if (editor && editor.getHTML() !== doc.content) {
+            editor.commands.setContent(doc.content || '');
+          }
+          setIsViewingVersion(false);
+        }
+      } else {
+        // Switch to specific version
+        const versionDoc = await getDocumentVersion(documentId, versionNumber);
+        if (versionDoc) {
+          setTitle(versionDoc.title || '');
+          setCategory(versionDoc.extra?.category || '');
+          setTags(versionDoc.extra?.tags || []);
+          setContent(versionDoc.content || '');
+          
+          const documentContent = {
+            title: versionDoc.title || '',
+            content: versionDoc.content || '',
+            extra: {
+              estimatedReadTime: versionDoc.extra?.estimatedReadTime,
+              category: versionDoc.extra?.category,
+              tags: versionDoc.extra?.tags
+            }
+          };
+          setPristine(documentContent);
+          
+          if (editor && editor.getHTML() !== versionDoc.content) {
+            editor.commands.setContent(versionDoc.content || '');
+          }
+          setIsViewingVersion(true);
+        }
+      }
+      
+      setCurrentVersion(versionNumber);
+      setEditable(false);
+      setIsVersionDropdownOpen(false);
+      
+      const latestVersion = Math.max(...versions.map(v => v.version_number));
+      const isLatest = versionNumber === latestVersion;
+      toast.success(`Switched to ${isLatest ? 'latest version' : `version ${versionNumber}`}`);
+    } catch (error) {
+      console.error('Error switching version:', error);
+      toast.error('Failed to switch version');
+    }
+  };
+
+  const formatVersionDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // Calculate dropdown position when it opens
+  useEffect(() => {
+    if (isVersionDropdownOpen && dropdownButtonRef) {
+      const rect = dropdownButtonRef.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 8, // 8px gap (mt-2)
+        right: window.innerWidth - rect.right
+      });
+    } else {
+      setDropdownPosition(null);
+    }
+  }, [isVersionDropdownOpen, dropdownButtonRef]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isVersionDropdownOpen && dropdownButtonRef && !dropdownButtonRef.contains(event.target as Node)) {
+        const dropdown = document.getElementById('version-dropdown-portal');
+        if (dropdown && !dropdown.contains(event.target as Node)) {
+          setIsVersionDropdownOpen(false);
+        }
+      }
+    };
+
+    if (isVersionDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isVersionDropdownOpen, dropdownButtonRef]);
+
   if (documentNotFound) {
     return (
       <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-zinc-900 to-gray-800 rounded-xl shadow-xl border border-zinc-800">
@@ -494,14 +640,40 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
                   <span className="text-blue-300 text-sm font-medium">Generating...</span>
                 </div>
               )}
+              {isViewingVersion && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-amber-600/20 border border-amber-500/30 rounded-full">
+                  <History className="w-4 h-4 text-amber-300" />
+                  <span className="text-amber-300 text-sm font-medium">Viewing Version {currentVersion}</span>
+                </div>
+              )}
             </div>
           )}
           <div className="flex items-center space-x-2">
+            {/* Version Dropdown - Only show in read mode and when versions exist */}
+            {!editable && versions.length > 0 && !isStreaming && !isStreamingActive && (
+              <div className="relative">
+                <button
+                  ref={setDropdownButtonRef}
+                  onClick={() => setIsVersionDropdownOpen(!isVersionDropdownOpen)}
+                  className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-zinc-100 rounded-lg border border-zinc-600 hover:border-zinc-500 transition-all text-sm"
+                  disabled={isStreaming || isStreamingActive}
+                >
+                  <History className="w-4 h-4" />
+                  <span>
+                    {currentVersion === Math.max(...versions.map(v => v.version_number)) 
+                      ? 'Latest' 
+                      : `v${currentVersion}`
+                    }
+                  </span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${isVersionDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            )}
             <button
               onClick={tryToggleEditable}
-              disabled={isStreaming || isStreamingActive}
+              disabled={isStreaming || isStreamingActive || isViewingVersion}
               className={`flex items-center rounded-lg px-3 py-2 font-semibold text-sm transition-colors ${
-                isStreaming || isStreamingActive
+                isStreaming || isStreamingActive || isViewingVersion
                   ? 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-60'
                   : editable
                   ? 'bg-gray-700 hover:bg-gray-800 text-white'
@@ -510,6 +682,8 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
               title={
                 isStreaming || isStreamingActive 
                   ? "Cannot edit while generating" 
+                  : isViewingVersion
+                  ? "Cannot edit version - switch to latest first"
                   : editable 
                   ? "Switch to Read Mode" 
                   : "Edit Document"
@@ -642,6 +816,67 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
           </div>
         </div>
       </div>
+
+      {/* Version Dropdown Portal - Rendered at document level */}
+      {isVersionDropdownOpen && dropdownPosition && typeof window !== 'undefined' && createPortal(
+        <div
+          id="version-dropdown-portal"
+          className="fixed w-80 bg-zinc-950 border border-zinc-700 rounded-lg shadow-2xl max-h-64 overflow-y-auto backdrop-blur-sm"
+          style={{
+            top: `${dropdownPosition.top}px`,
+            right: `${dropdownPosition.right}px`,
+            zIndex: 99999
+          }}
+        >
+          <div className="p-2">
+            <div className="text-xs text-zinc-400 px-2 py-1 border-b border-zinc-700 mb-1">
+              Document Versions
+            </div>
+            {versions
+              .sort((a, b) => b.version_number - a.version_number)
+              .map((version) => {
+                const isLatest = version.version_number === Math.max(...versions.map(v => v.version_number));
+                const isCurrent = version.version_number === currentVersion;
+                return (
+                  <button
+                    key={version.version_number}
+                    onClick={() => switchToVersion(version.version_number)}
+                    className={`w-full text-left px-3 py-2 rounded-lg transition-all text-sm ${
+                      isCurrent
+                        ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
+                        : 'hover:bg-zinc-800/80 text-zinc-300 hover:text-zinc-100'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">
+                          Version {version.version_number}
+                        </span>
+                        {isLatest && (
+                          <span className="px-2 py-0.5 bg-green-600/20 text-green-300 text-xs rounded-full border border-green-500/30">
+                            Latest
+                          </span>
+                        )}
+                      </div>
+                      {isCurrent && (
+                        <div className="w-2 h-2 bg-indigo-400 rounded-full"></div>
+                      )}
+                    </div>
+                    <div className="text-xs text-zinc-400 mt-1">
+                      {formatVersionDate(version.created_at)}
+                    </div>
+                    {version.change_summary && (
+                      <div className="text-xs text-zinc-500 mt-1 truncate">
+                        {version.change_summary}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Styles */}
       <style>{`
