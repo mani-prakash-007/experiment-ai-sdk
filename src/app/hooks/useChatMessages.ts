@@ -76,15 +76,24 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
 
   const updateMessage = useCallback(async (messageId: string, updates: Partial<Message>) => {
     try {
-      const { error } = await supabase
-        .from('messages')
-        .update(updates)
-        .eq('id', messageId)
-        .select();
-      if (error) throw error;
+      // First update local state immediately for smooth UI
       setMessages(prev => 
         prev.map(m => m.id === messageId ? { ...m, ...updates } : m)
       );
+
+      // Then update database
+      const { error } = await supabase
+        .from('messages')
+        .update(updates)
+        .eq('id', messageId);
+        
+      if (error) {
+        // Revert local state if database update fails
+        setMessages(prev => 
+          prev.map(m => m.id === messageId ? { ...m, ...Object.fromEntries(Object.keys(updates).map(key => [key, undefined])) } : m)
+        );
+        throw error;
+      }
     } catch (error) {
       console.error('Error updating message:', error);
       toast.error('Message updation failed');

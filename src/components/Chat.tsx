@@ -9,6 +9,7 @@ import { FloatingDock } from '@/components/FloatingDock';
 import { useAuth } from '@/app/hooks/useAuth';
 import { useChatSessions } from '@/app/hooks/useChatSessions';
 import { useChatMessages } from '@/app/hooks/useChatMessages';
+import { useDocuments } from '@/app/hooks/useDocument';
 import { Message, ModelOption, UploadedFile } from '@/app/types/chat';
 import { toast } from 'sonner';
 import { useParams } from 'next/navigation';
@@ -55,6 +56,7 @@ export default function Chat() {
 
   const { user, loading: authLoading } = useAuth();
   const { sessions, createSession, updateSessionTitle, refreshSessions } = useChatSessions(user?.id);
+  const { createDocument, saveDocument } = useDocuments({ userId: user?.id });
 
   const [input, setInput] = useState('');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -69,6 +71,12 @@ export default function Chat() {
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [streamingStarted, setStreamingStarted] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
+  const [streamingDocumentData, setStreamingDocumentData] = useState<{
+    title: string;
+    content: string;
+    extra?: any;
+  } | null>(null);
+  const [streamingCompleted, setStreamingCompleted] = useState(false);
 
   const aiSubmittedSession = useRef<string | null>(null);
 
@@ -96,6 +104,8 @@ export default function Chat() {
     setActiveDocumentId(null);
     setStreamingMessageId(null);
     setStreamingStarted(false);
+    setStreamingDocumentData(null);
+    setStreamingCompleted(false);
     aiSubmittedSession.current = null;
     setShouldAutoScroll(false);
   };
@@ -208,11 +218,11 @@ export default function Chat() {
     }, 2000);
   }, [activeSessionId, scrollToBottom]);
 
-  // DOC View Logic
-  const openDocument = (messageId: string, document: Message['document']) => {
-    if (document) {
+  // DOC View Logic - now works with document IDs
+  const openDocument = (messageId: string, documentId: string) => {
+    if (documentId) {
       setIsEditorOpen(true);
-      setActiveDocumentId(messageId);
+      setActiveDocumentId(documentId);
     }
   };
 
@@ -221,20 +231,12 @@ export default function Chat() {
     setActiveDocumentId(null);
   };
 
-  const updateDocument = (documentContent: EditorDocumentContent) => {
+  const updateDocument = async (documentContent: EditorDocumentContent) => {
     if (activeDocumentId) {
-      const message = messages.find(m => m.id === activeDocumentId);
-      if (message?.document) {
-        updateMessage(activeDocumentId, {
-          document: documentContent
-        });
-        toast.success('Document Saved');
-      }
+      await saveDocument(activeDocumentId, documentContent);
+      toast.success('Document Saved');
     }
   };
-
-  const getActiveDocument = () =>
-    messages.find(msg => msg.id === activeDocumentId)?.document;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -244,66 +246,136 @@ export default function Chat() {
     }
   }, [handleScroll]);
 
-  // STREAMING LOGIC
+  // STREAMING LOGIC - Fixed to prevent infinite loops
   useEffect(() => {
-    if (
-      activeSessionId &&
-      aiSubmittedSession.current === activeSessionId &&
-      (isLoading || object?.general)
-    ) {
-      // Start of streaming: create the assistant message
+    const handleStreaming = async () => {
+      // Only process if this is the active session and we have streaming data
+      if (!activeSessionId || aiSubmittedSession.current !== activeSessionId) {
+        return;
+      }
+
+      // Start of streaming: create only the message (no document yet)
       if (isLoading && !streamingMessageId && !streamingStarted) {
         setStreamingStarted(true);
-        setShouldAutoScroll(true); // Enable scroll for streamed LLM responses
-        const aiMessage: Omit<Message, 'id' | 'created_at'> = {
-          session_id: activeSessionId,
-          role: 'assistant',
-          content: '',
-          document: {
-            title: 'Generating Document 📄',
+        setStreamingCompleted(false);
+        setShouldAutoScroll(true);
+        
+        try {
+          const aiMessage: Omit<Message, 'id' | 'created_at'> = {
+            session_id: activeSessionId,
+            role: 'assistant',
             content: '',
-            extra: undefined,
-          },
-        };
-        addMessage(aiMessage).then((addedMessage) => {
+          };
+          
+          const addedMessage = await addMessage(aiMessage);
           if (addedMessage) {
-            setActiveDocumentId(addedMessage.id);
             setStreamingMessageId(addedMessage.id);
           }
-        });
+        } catch (error) {
+          console.error('Error creating streaming message:', error);
+          setStreamingStarted(false);
+        }
+        return;
       }
-      // Streaming: update message with incoming stream objects/content
-      if (streamingMessageId && (object?.general || object?.document || object?.title)) {
+      
+      // During streaming: accumulate document data and update message content (throttled)
+      if (streamingMessageId && isLoading && (object?.general || object?.document || object?.title)) {
         const currentContent = object?.general || '';
         const currentDocumentContent = object?.document || '';
-        const currentTitle = object?.title || 'Generating Document...';
-        if (currentDocumentContent) {
-          setIsEditorOpen(true);
+        const currentTitle = object?.title || '';
+        
+        // Update message content (throttled to prevent excessive DB calls)
+        if (currentContent) {
+          try {
+            await updateMessage(streamingMessageId, {
+              content: currentContent,
+            });
+          } catch (error) {
+            console.error('Error updating message during streaming:', error);
+          }
         }
-        updateMessage(streamingMessageId, {
-          content: currentContent,
-          document: {
+        
+        // Accumulate document data (don't save to DB yet)
+        if (currentDocumentContent || currentTitle) {
+          setStreamingDocumentData({
             title: currentTitle,
             content: currentDocumentContent,
             extra: cleanExtraObject(object?.extra),
+          });
+        }
+        
+        setShouldAutoScroll(true);
+        return;
+      }
+      
+      // End of stream: create document and link to message (only once)
+      if (!isLoading && streamingMessageId && streamingStarted && !streamingCompleted) {
+        setStreamingCompleted(true);
+        
+        try {
+          // Only create document if we have meaningful content
+          const hasContent = streamingDocumentData?.content?.trim();
+          const hasTitle = streamingDocumentData?.title?.trim();
+          const shouldCreateDocument = hasContent || hasTitle;
+          
+          if (shouldCreateDocument && streamingDocumentData) {
+            // Create the document with final content
+            const newDocument = await createDocument({
+              title: streamingDocumentData.title || 'Untitled Document',
+              content: streamingDocumentData.content || '',
+              extra: streamingDocumentData.extra,
+            });
+            
+            if (newDocument) {
+              // Update the message to link to the document
+              await updateMessage(streamingMessageId, {
+                document_id: newDocument.id,
+              });
+              
+              // Open the editor with the new document
+              setActiveDocumentId(newDocument.id);
+              setIsEditorOpen(true);
+            }
           }
-        });
-        setShouldAutoScroll(true); // Maintain scroll as content streams
+        } catch (error) {
+          console.error('Error finalizing document:', error);
+        } finally {
+          // Cleanup streaming state
+          setStreamingMessageId(null);
+          setStreamingStarted(false);
+          setStreamingDocumentData(null);
+          setStreamingCompleted(false);
+          aiSubmittedSession.current = null;
+        }
       }
-      // End of stream: cleanup streaming flag
-      if (!isLoading && object?.general && streamingMessageId) {
-        setStreamingMessageId(null);
-        setStreamingStarted(false);
-        aiSubmittedSession.current = null;
-      }
-    }
-    // Handle streaming error
+    };
+
+    handleStreaming();
+  }, [
+    isLoading, 
+    object?.general, 
+    object?.document, 
+    object?.title, 
+    object?.extra,
+    activeSessionId, 
+    streamingMessageId, 
+    streamingStarted, 
+    streamingCompleted,
+    addMessage, 
+    updateMessage, 
+    createDocument
+  ]);
+
+  // Handle streaming errors
+  useEffect(() => {
     if (error && streamingMessageId) {
       setStreamingMessageId(null);
       setStreamingStarted(false);
+      setStreamingDocumentData(null);
+      setStreamingCompleted(false);
       aiSubmittedSession.current = null;
     }
-  }, [object, isLoading, error, addMessage, updateMessage, messages, activeSessionId, streamingMessageId, streamingStarted]);
+  }, [error, streamingMessageId]);
 
   if (authLoading) {
     return (
@@ -409,18 +481,18 @@ export default function Chat() {
         {/* CANVAS EDITOR AS SIDE COLUMN */}
         <div
           className={`transition-all duration-500 ease-in-out border-l border-gray-600 bg-gray-900 overflow-hidden ${
-            isEditorOpen && getActiveDocument()
+            isEditorOpen && activeDocumentId
               ? "w-[clamp(350px,45vw,700px)] min-w-[350px] opacity-100"
               : "w-0 min-w-0 opacity-0"
           }`}
           style={{ boxShadow: isEditorOpen ? "-2px 0 16px rgba(0,0,0,0.12)" : undefined }}
         >
-          {isEditorOpen && getActiveDocument() && (
+          {isEditorOpen && activeDocumentId && (
             <CanvasTextEditor
-              value={getActiveDocument() as EditorDocumentContent}
+              documentId={activeDocumentId}
               onSave={updateDocument}
               onClose={closeEditor}
-              isStreaming={isLoading && streamingMessageId === activeDocumentId}
+              isStreaming={isLoading && streamingMessageId !== null}
             />
           )}
         </div>

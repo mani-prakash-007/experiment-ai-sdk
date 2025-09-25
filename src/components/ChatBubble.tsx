@@ -9,7 +9,7 @@ import { User as SupabaseUser } from '@supabase/supabase-js';
 interface ChatBubbleProps {
   message: Message;
   user: SupabaseUser | null;
-  onDocumentClick: (messageId: string, document: Message['document']) => void;
+  onDocumentClick: (messageId: string, documentId: string) => void;
   isError?: boolean;
   isStreaming?: boolean;
   isActiveStream?: boolean;
@@ -146,11 +146,29 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const renderMessageContent = () => {
     const isAssistant = message.role === 'assistant';
     const hasContent = typeof message.content === 'string' && message.content.trim().length > 0;
-    const hasDocument = !!(message.document && typeof message.document.content === 'string' && message.document.content.trim().length > 0);
+    const hasDocument = !!(message.document_id);
 
     // 1. If actively streaming this bubble, show loading or stream content
     if (isStreaming && isActiveStream) {
-      return hasContent ? message.content : renderGeneratingLoading();
+      if (hasContent) {
+        return (
+          <div>
+            {message.content}
+            {!hasDocument && (
+              <div className="mt-2 text-xs text-blue-300 opacity-75 animate-pulse">
+                <div className="flex items-center">
+                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-2" style={{ animationDelay: '300ms' }}></div>
+                  Preparing document...
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      } else {
+        return renderGeneratingLoading();
+      }
     }
 
     // 2. Assistant message logic (after streaming done)
@@ -159,7 +177,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       if (hasDocument) {
         return (
           <div className="text-sm opacity-90">
-            <span className="italic">Document generated. No message content.</span>
+            <span className="italic">Document created successfully.</span>
             <div className="text-xs mt-1 opacity-75">
               Click below to view the document.
             </div>
@@ -176,7 +194,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     // 3. User messages
     if (hasContent) return message.content;
 
-    // 4. Fallback for empty user message (never showing during streaming)
+    // 4. Fallback for empty user message
     return (
       <div className="text-sm opacity-75 italic">
         Message sent.
@@ -231,17 +249,17 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             message.role === 'user'
               ? 'bg-blue-500 text-white rounded-br-md'
               : 'bg-gray-800 text-gray-100 rounded-bl-md border border-gray-700'
-          } ${message.document?.content ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border-white/50' : ''}`}
-          onClick={() => message.document?.content && onDocumentClick(message.id, message.document)}
+          } ${message.document_id ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border-white/50' : ''}`}
+          onClick={() => message.document_id && onDocumentClick(message.id, message.document_id)}
         >
           <div className="prose prose-invert max-w-none text-sm leading-relaxed">
             {renderMessageContent()}
           </div>
           {renderFileContent(message.file_data)}
-          {message?.document?.content && (
+          {message.document_id && (
             <div className="mt-2 pt-2 border-t border-gray-600 flex items-center space-x-2 text-xs text-gray-300">
               <FileText className="w-3 h-3" />
-              <span>Click to view document: <span className='italic'>"{message.document.title || 'Untitled Document'}"</span></span>
+              <span>Click to view document</span>
             </div>
           )}
         </div>

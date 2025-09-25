@@ -30,6 +30,7 @@ import {
   RiH3 as Heading3
 } from 'react-icons/ri';
 import { toast } from 'sonner';
+import { useDocuments } from '@/app/hooks/useDocument';
 
 type EditorDocumentContent = {
   title: string;
@@ -42,7 +43,7 @@ type EditorDocumentContent = {
 };
 
 type Props = {
-  value: EditorDocumentContent;
+  documentId: string; // Changed from value prop to documentId
   onSave: (newValue: EditorDocumentContent) => void;
   onClose?: () => void;
   isStreaming?: boolean;
@@ -150,38 +151,28 @@ const ACTION_BUTTONS = [
   { icon: Redo2, command: 'redo', title: "Redo", exec: (ed: Editor) => ed.chain().focus().redo().run(), canExec: (ed: Editor) => ed.can().redo() },
 ];
 
-const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose, isStreaming = false }) => {
+const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStreaming = false }) => {
+  const { getDocument, loading: documentLoading, error: documentError } = useDocuments();
+  
   const [editable, setEditable] = useState(false);
-  const [title, setTitle] = useState(value.title || '');
-  const [category, setCategory] = useState(value.extra?.category || '');
-  const [tags, setTags] = useState<string[]>(value.extra?.tags || []);
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
-  const [content, setContent] = useState(value.content || '');
-  const [pristine, setPristine] = useState<EditorDocumentContent>(value);
+  const [content, setContent] = useState('');
+  const [pristine, setPristine] = useState<EditorDocumentContent>({
+    title: '',
+    content: '',
+    extra: {}
+  });
   const [hasUnsaved, setHasUnsaved] = useState(false);
   const [isStreamingActive, setIsStreamingActive] = useState(false);
+  const [documentNotFound, setDocumentNotFound] = useState(false);
+  const [documentFetched, setDocumentFetched] = useState(false);
 
   const estimatedReadTime = estimateReadingTime(content);
 
-  // When entering edit mode, remember pristine
-  const enterEdit = () => {
-    setPristine({
-      title,
-      extra: { category, tags },
-      content
-    });
-    setEditable(true);
-  };
-
-  // Compare against pristine on every edit (not value, not toggling)
-  useEffect(() => {
-    setHasUnsaved(isDocEdited(
-      { title, extra: { category, tags }, content },
-      pristine
-    ));
-  }, [title, category, tags, content, pristine]);
-
-  const editor = useEditor({
+    const editor = useEditor({
     extensions: [
       StarterKit,
       Underline,
@@ -207,63 +198,146 @@ const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose, isStreaming
     immediatelyRender: false
   });
 
-    // Handle both regular updates and streaming updates
+  // Fetch document data when documentId changes
+  useEffect(() => {
+    const fetchDocument = async () => {
+      if (!documentId) {
+        setDocumentFetched(false);
+        return;
+      }
+      
+      // Prevent refetching the same document
+      if (documentFetched && !isStreaming) return;
+      
+      try {
+        const doc = await getDocument(documentId);
+        if (doc) {
+          setTitle(doc.title || '');
+          setCategory(doc.extra?.category || '');
+          setTags(doc.extra?.tags || []);
+          setContent(doc.content || '');
+          
+          const documentContent = {
+            title: doc.title || '',
+            content: doc.content || '',
+            extra: {
+              estimatedReadTime: doc.extra?.estimatedReadTime,
+              category: doc.extra?.category,
+              tags: doc.extra?.tags
+            }
+          };
+          setPristine(documentContent);
+          setDocumentNotFound(false);
+          setDocumentFetched(true);
+
+          // Update editor content if needed
+          if (editor && editor.getHTML() !== doc.content) {
+            editor.commands.setContent(doc.content || '');
+          }
+        } else {
+          // Document might not exist yet if streaming just started
+          if (!isStreaming) {
+            setDocumentNotFound(true);
+            setDocumentFetched(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching document:', error);
+        if (!isStreaming) {
+          setDocumentNotFound(true);
+          setDocumentFetched(true);
+        }
+      }
+    };
+
+    fetchDocument();
+  }, [documentId, getDocument, isStreaming, editor, documentFetched]);
+
+  // Handle streaming state changes
+  useEffect(() => {
+    if (isStreaming) {
+      setIsStreamingActive(true);
+      setEditable(false);
+    } else if (isStreamingActive) {
+      setIsStreamingActive(false);
+      setEditable(false);
+      // Reset document fetched flag to allow refetch after streaming
+      setDocumentFetched(false);
+    }
+  }, [isStreaming, isStreamingActive]);
+
+  // Remove the polling logic since we're not updating during streaming
+  useEffect(() => {
+    if (isStreaming) {
+      setIsStreamingActive(true);
+      setEditable(false);
+    } else if (isStreamingActive) {
+      setIsStreamingActive(false);
+      // Refetch document when streaming ends
+      const refetchDocument = async () => {
+        const doc = await getDocument(documentId);
+        if (doc) {
+          setTitle(doc.title || '');
+          setCategory(doc.extra?.category || '');
+          setTags(doc.extra?.tags || []);
+          setContent(doc.content || '');
+          
+          const documentContent = {
+            title: doc.title || '',
+            content: doc.content || '',
+            extra: {
+              estimatedReadTime: doc.extra?.estimatedReadTime,
+              category: doc.extra?.category,
+              tags: doc.extra?.tags
+            }
+          };
+          setPristine(documentContent);
+          
+          if (editor && editor.getHTML() !== doc.content) {
+            editor.commands.setContent(doc.content || '');
+          }
+        }
+      };
+      refetchDocument();
+    }
+  }, [isStreaming, isStreamingActive, documentId, getDocument, editor]);
+
+  // When entering edit mode, remember pristine
+  const enterEdit = () => {
+    setPristine({
+      title,
+      extra: { category, tags },
+      content
+    });
+    setEditable(true);
+  };
+
+  // Compare against pristine on every edit (not value, not toggling)
+  useEffect(() => {
+    setHasUnsaved(isDocEdited(
+      { title, extra: { category, tags }, content },
+      pristine
+    ));
+  }, [title, category, tags, content, pristine]);
+
+
+  // Handle streaming state changes
   useEffect(() => {
     const isNewStreamingSession = isStreaming && !isStreamingActive;
-    const isStreamingUpdate = isStreaming && isStreamingActive;
     const isStreamingEnd = !isStreaming && isStreamingActive;
     
     // Starting a new streaming session
     if (isNewStreamingSession) {
-      setTitle(value.title || 'Generating Document...');
-      setCategory(value.extra?.category || '');
-      setTags(value.extra?.tags || []);
-      setContent(value.content || '');
+      setTitle('Generating Document...');
       setEditable(false);
       setIsStreamingActive(true);
-      
-      if (editor && editor.getHTML() !== value.content) {
-        editor.commands.setContent(value.content || '');
-      }
-    }
-    // Continuing streaming updates
-    else if (isStreamingUpdate) {
-      setTitle(value.title || 'Generating Document...');
-      setCategory(value.extra?.category || '');
-      setTags(value.extra?.tags || []);
-      setContent(value.content || '');
-      
-      if (editor && editor.getHTML() !== value.content) {
-        editor.commands.setContent(value.content || '');
-      }
     }
     // Streaming has ended
     else if (isStreamingEnd) {
-      setTitle(value.title || '');
-      setCategory(value.extra?.category || '');
-      setTags(value.extra?.tags || []);
-      setContent(value.content || '');
       setIsStreamingActive(false);
-      setPristine(value);
-      
-      if (editor && editor.getHTML() !== value.content) {
-        editor.commands.setContent(value.content || '');
-      }
-    }
-    // Regular document switch (not streaming)
-    else if (!isStreaming && !isStreamingActive) {
-      setTitle(value.title || '');
-      setCategory(value.extra?.category || '');
-      setTags(value.extra?.tags || []);
-      setContent(value.content || '');
       setEditable(false);
-      setPristine(value);
-      
-      if (editor && value.content !== editor.getHTML()) {
-        editor.commands.setContent(value.content || '');
-      }
     }
-  }, [value, isStreaming, isStreamingActive, editor]);
+  }, [isStreaming, isStreamingActive]);
 
 
   useEffect(() => {
@@ -338,6 +412,59 @@ const CanvasTextEditor: React.FC<Props> = ({ value, onSave, onClose, isStreaming
       toast('Switched to edit mode', { icon: <EditIcon /> });
     }
   };
+
+  if (documentNotFound) {
+    return (
+      <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-zinc-900 to-gray-800 rounded-xl shadow-xl border border-zinc-800">
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="text-red-400 mb-2">Document not found</div>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (documentLoading) {
+    return (
+      <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-zinc-900 to-gray-800 rounded-xl shadow-xl border border-zinc-800">
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p className="text-gray-400">Loading document...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state during streaming when document doesn't exist yet
+  if ((isStreaming || isStreamingActive) && (!documentFetched || (!title && !content))) {
+    return (
+      <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-zinc-900 to-gray-800 rounded-xl shadow-xl border border-zinc-800">
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="flex items-center gap-2 px-3 py-1 bg-blue-600/20 border border-blue-500/30 rounded-full mb-4">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+              <span className="text-blue-300 text-sm font-medium">
+                {documentFetched ? "Generating document..." : "Preparing document..."}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-zinc-900 to-gray-800 rounded-xl shadow-xl border border-zinc-800">

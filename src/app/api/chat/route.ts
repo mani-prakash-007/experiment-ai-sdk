@@ -7,10 +7,10 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 
 const CanvasDocumentSchema = z.object({
-  title: z.string().describe("The title of the document"),
   general: z
     .string()
     .describe("Brief summary for chat bubble display with markdown response"),
+  title: z.string().describe("The title of the document"),
   document: z.string().describe(
     `The main content for the canvas editor. It should only contain HTML semantic tags. ` +
       `I'm using this to feed it into Canvas Text Editor which has support for rich text edit features such as bold, italic, strike through, underline, h1,h2,h3, quote, code`

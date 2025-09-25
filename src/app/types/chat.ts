@@ -34,21 +34,10 @@ export interface Message {
   session_id: string;
   role: 'user' | 'assistant';
   content: string;
-  document?: {
-    title: string;
-    content: string;
-    extra?: {
-      wordCount?: number;
-      estimatedReadTime?: string;
-      tags?: string[];
-      category?: string;
-    };
-  };
+  document_id?: string; // Changed from document object to document ID reference
   file_data?: UploadedFile;
   created_at: string;
 }
-
-
 
 export interface ChatSession {
   id: string;
