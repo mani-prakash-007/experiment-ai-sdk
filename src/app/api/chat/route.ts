@@ -8,13 +8,13 @@ import { z } from "zod";
 
 const CanvasDocumentSchema = z.object({
   title: z.string().describe("The title of the document"),
+  general: z
+    .string()
+    .describe("Brief summary for chat bubble display with markdown response"),
   document: z.string().describe(
     `The main content for the canvas editor. It should only contain HTML semantic tags. ` +
       `I'm using this to feed it into Canvas Text Editor which has support for rich text edit features such as bold, italic, strike through, underline, h1,h2,h3, quote, code`
   ),
-  general: z
-    .string()
-    .describe("Brief summary for chat bubble display with markdown response"),
   extra: z
     .object({
       estimatedReadTime: z.string().optional(),

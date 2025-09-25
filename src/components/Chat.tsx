@@ -14,7 +14,6 @@ import { toast } from 'sonner';
 import { useParams } from 'next/navigation';
 import { ChatBubble } from '@/components/ChatBubble';
 import { WelcomeScreen } from '@/components/WelcomeScreen';
-import { notFound } from 'next/navigation';
 
 const CanvasTextEditor = dynamic(() => import('@/components/CanvasTextEditor'), { ssr: false });
 
@@ -68,8 +67,9 @@ export default function Chat() {
   const [uploadedFile, setUploadedFile] = useState<UploadedFile>();
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [streamingStarted, setStreamingStarted] = useState(false);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
 
-  // Session-specific AI result context
   const aiSubmittedSession = useRef<string | null>(null);
 
   const {
@@ -78,9 +78,8 @@ export default function Chat() {
     hasMore,
     loadMoreMessages,
     addMessage,
-    updateMessage
+    updateMessage,
   } = useChatMessages({ sessionId: activeSessionId });
-  
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -90,14 +89,15 @@ export default function Chat() {
     schema: CanvasDocumentSchema,
   });
 
-  // Always clear all session-specific state BEFORE switching session
   const clearSessionState = () => {
     setInput('');
     setUploadedFile(undefined);
     setIsEditorOpen(false);
     setActiveDocumentId(null);
     setStreamingMessageId(null);
+    setStreamingStarted(false);
     aiSubmittedSession.current = null;
+    setShouldAutoScroll(false);
   };
 
   const generateSessionTitle = async (firstMessage: string) => {
@@ -119,7 +119,6 @@ export default function Chat() {
 
   const handleFileRemove = () => setUploadedFile(undefined);
 
-  // Always clear editor/input/etc when session changes (extra guard)
   useEffect(() => {
     clearSessionState();
   }, [activeSessionId]);
@@ -128,6 +127,14 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
+  // Only trigger auto-scroll when it is truly a user/bot new message
+  useEffect(() => {
+    if (shouldAutoScroll && messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setShouldAutoScroll(false);
+    }
+  }, [messages, shouldAutoScroll]);
+
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -135,7 +142,7 @@ export default function Chat() {
     setShowScrollButton(!isNearBottom);
     if (container.scrollTop === 0 && hasMore && !messagesLoading) {
       const oldScrollHeight = container.scrollHeight;
-      loadMoreMessages();
+      handleLoadMoreMessages(); // uses wrapped logic to disable auto-scroll
       setTimeout(() => {
         const newScrollHeight = container.scrollHeight;
         container.scrollTop = newScrollHeight - oldScrollHeight;
@@ -143,9 +150,17 @@ export default function Chat() {
     }
   }, [hasMore, messagesLoading, loadMoreMessages]);
 
+  // This wrapper disables auto-scroll when loading older messages
+  const handleLoadMoreMessages = async () => {
+    setShouldAutoScroll(false); // Prevent auto-scroll on history pagination
+    await loadMoreMessages();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !activeSessionId || messagesLoading) return;
+
+    setShouldAutoScroll(true); // Enable scroll to bottom for new chat response
 
     const userMessage: Omit<Message, 'id' | 'created_at'> = {
       session_id: activeSessionId,
@@ -183,6 +198,7 @@ export default function Chat() {
       }));
     }
     aiSubmittedSession.current = activeSessionId;
+    setStreamingStarted(false);
     submit({ messages: contextToSend, model: selectedModel });
   };
 
@@ -228,16 +244,17 @@ export default function Chat() {
     }
   }, [handleScroll]);
 
-  // STREAMING AI RESPONSE - Open editor immediately and stream content
+  // STREAMING LOGIC
   useEffect(() => {
     if (
       activeSessionId &&
       aiSubmittedSession.current === activeSessionId &&
       (isLoading || object?.general)
     ) {
-      // Open editor immediately when streaming starts
-      scrollToBottom();
-      if (isLoading && !streamingMessageId) {
+      // Start of streaming: create the assistant message
+      if (isLoading && !streamingMessageId && !streamingStarted) {
+        setStreamingStarted(true);
+        setShouldAutoScroll(true); // Enable scroll for streamed LLM responses
         const aiMessage: Omit<Message, 'id' | 'created_at'> = {
           session_id: activeSessionId,
           role: 'assistant',
@@ -248,7 +265,6 @@ export default function Chat() {
             extra: undefined,
           },
         };
-        
         addMessage(aiMessage).then((addedMessage) => {
           if (addedMessage) {
             setActiveDocumentId(addedMessage.id);
@@ -256,17 +272,14 @@ export default function Chat() {
           }
         });
       }
-      
-      // Update content during streaming
+      // Streaming: update message with incoming stream objects/content
       if (streamingMessageId && (object?.general || object?.document || object?.title)) {
         const currentContent = object?.general || '';
         const currentDocumentContent = object?.document || '';
         const currentTitle = object?.title || 'Generating Document...';
-        
         if (currentDocumentContent) {
           setIsEditorOpen(true);
         }
-        
         updateMessage(streamingMessageId, {
           content: currentContent,
           document: {
@@ -275,15 +288,22 @@ export default function Chat() {
             extra: cleanExtraObject(object?.extra),
           }
         });
+        setShouldAutoScroll(true); // Maintain scroll as content streams
       }
-      
-      // Final cleanup when streaming completes
+      // End of stream: cleanup streaming flag
       if (!isLoading && object?.general && streamingMessageId) {
         setStreamingMessageId(null);
+        setStreamingStarted(false);
         aiSubmittedSession.current = null;
       }
     }
-  }, [object, isLoading, addMessage, updateMessage, messages, activeSessionId, streamingMessageId, scrollToBottom]);
+    // Handle streaming error
+    if (error && streamingMessageId) {
+      setStreamingMessageId(null);
+      setStreamingStarted(false);
+      aiSubmittedSession.current = null;
+    }
+  }, [object, isLoading, error, addMessage, updateMessage, messages, activeSessionId, streamingMessageId, streamingStarted]);
 
   if (authLoading) {
     return (
@@ -297,112 +317,114 @@ export default function Chat() {
   }
 
   return (
-  <div className="flex h-full w-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
-    {/* 2 COLUMN FLEX */}
-    <div className={`flex flex-row h-full w-full transition-all duration-500 ease-in-out`}>
-      <div className={`flex flex-col flex-1 min-w-0 h-full`}>
-        {activeSessionId ? (
-          <div 
-            ref={containerRef}
-            className="h-full w-full flex flex-col justify-between overflow-hidden"
-          >
-            <div className="flex-1 overflow-y-auto px-4">
-              <div className="space-y-4 pb-20 max-w-full mt-10">
-                {hasMore && messages.length > 0 && (
-                  <div className="text-center py-2">
-                    <button
-                      onClick={loadMoreMessages}
-                      disabled={messagesLoading}
-                      className="text-blue-400 hover:text-blue-300 text-sm px-4 py-2 rounded-lg border border-blue-400/30 hover:border-blue-300/50 transition-colors disabled:opacity-50"
-                    >
-                      {messagesLoading ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400 inline-block mr-2"></div>
-                          Loading...
-                        </>
-                      ) : (
-                        'Load older messages'
-                      )}
-                    </button>
-                  </div>
-                )}
-                {messages.map((message) => (
-                  <div key={message.id} className="mx-auto max-w-[820px] w-full">
-                    <ChatBubble
-                      key={message.id}
-                      message={message}
-                      user={user}
-                      onDocumentClick={openDocument}
-                    />
-                  </div>
-                ))}
-                {error && (
-                  <div className="mx-auto max-w-[720px] w-full">
-                    <ChatBubble
-                      message={{
-                        id: 'error',
-                        role: 'assistant',
-                        content: error.message,
-                        session_id: activeSessionId || '',
-                        created_at: new Date().toISOString(),
-                      } as Message}
-                      user={user}
-                      onDocumentClick={openDocument}
-                      isError={true}
-                    />
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
+    <div className="flex h-full w-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
+      {/* 2 COLUMN FLEX */}
+      <div className={`flex flex-row h-full w-full transition-all duration-500 ease-in-out`}>
+        <div className={`flex flex-col flex-1 min-w-0 h-full`}>
+          {activeSessionId ? (
+            <div 
+              ref={containerRef}
+              className="h-full w-full flex flex-col justify-between overflow-hidden"
+            >
+              <div className="flex-1 overflow-y-auto px-4">
+                <div className="space-y-4 pb-20 max-w-full mt-10">
+                  {hasMore && messages.length > 0 && (
+                    <div className="text-center py-2">
+                      <button
+                        onClick={handleLoadMoreMessages}
+                        disabled={messagesLoading}
+                        className="text-blue-400 hover:text-blue-300 text-sm px-4 py-2 rounded-lg border border-blue-400/30 hover:border-blue-300/50 transition-colors disabled:opacity-50"
+                      >
+                        {messagesLoading ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400 inline-block mr-2"></div>
+                            Loading...
+                          </>
+                        ) : (
+                          'Load older messages'
+                        )}
+                      </button>
+                    </div>
+                  )}
+                  {messages.map((message) => (
+                    <div key={message.id} className="mx-auto max-w-[820px] w-full">
+                      <ChatBubble
+                        key={message.id}
+                        message={message}
+                        user={user}
+                        onDocumentClick={openDocument}
+                        isStreaming={!!isLoading}
+                        isActiveStream={streamingMessageId === message.id}
+                      />
+                    </div>
+                  ))}
+                  {error && (
+                    <div className="mx-auto max-w-[720px] w-full">
+                      <ChatBubble
+                        message={{
+                          id: 'error',
+                          role: 'assistant',
+                          content: error.message,
+                          session_id: activeSessionId || '',
+                          created_at: new Date().toISOString(),
+                        } as Message}
+                        user={user}
+                        onDocumentClick={openDocument}
+                        isError={true}
+                      />
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+              </div>
+              {showScrollButton && (
+                <button
+                  onClick={scrollToBottom}
+                  className="absolute bottom-20 right-4 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-colors z-30"
+                >
+                  <ArrowDown className="w-5 h-5" />
+                </button>
+              )}
+              {/* Floating Dock */}
+              <div className="flex-shrink-0 p-4 flex justify-center bg-gradient-to-t from-gray-900 to-transparent">
+                <div className="w-full max-w-[820px]">
+                  <FloatingDock
+                    input={input}
+                    onSubmit={handleSubmit}
+                    isLoading={isLoading}
+                    setInput={setInput}
+                    selectedModel={selectedModel}
+                    onModelChange={setSelectedModel}
+                    uploadedFile={uploadedFile}
+                    onFileUpload={setUploadedFile}
+                    onFileRemove={handleFileRemove}
+                  />
+                </div>
               </div>
             </div>
-            {showScrollButton && (
-              <button
-                onClick={scrollToBottom}
-                className="absolute bottom-20 right-4 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-colors z-30"
-              >
-                <ArrowDown className="w-5 h-5" />
-              </button>
-            )}
-            {/* Updated FloatingDock block below */}
-            <div className="flex-shrink-0 p-4 flex justify-center bg-gradient-to-t from-gray-900 to-transparent">
-              <div className="w-full max-w-[820px]">
-                <FloatingDock
-                  input={input}
-                  onSubmit={handleSubmit}
-                  isLoading={isLoading}
-                  setInput={setInput}
-                  selectedModel={selectedModel}
-                  onModelChange={setSelectedModel}
-                  uploadedFile={uploadedFile}
-                  onFileUpload={setUploadedFile}
-                  onFileRemove={handleFileRemove}
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <WelcomeScreen createSession={createSession} refreshSessions={refreshSessions}/>
-        )}
-      </div>
-      {/* CANVAS EDITOR AS SIDE COLUMN */}
-      <div
-        className={`transition-all duration-500 ease-in-out border-l border-gray-600 bg-gray-900 overflow-hidden ${
-          isEditorOpen && getActiveDocument()
-            ? "w-[clamp(350px,45vw,700px)] min-w-[350px] opacity-100"
-            : "w-0 min-w-0 opacity-0"
-        }`}
-        style={{ boxShadow: isEditorOpen ? "-2px 0 16px rgba(0,0,0,0.12)" : undefined }}
-      >
-        {isEditorOpen && getActiveDocument() && (
-          <CanvasTextEditor
-            value={getActiveDocument() as EditorDocumentContent}
-            onSave={updateDocument}
-            onClose={closeEditor}
-            isStreaming={isLoading && streamingMessageId === activeDocumentId}
-          />
-        )}
+          ) : (
+            <WelcomeScreen createSession={createSession} refreshSessions={refreshSessions}/>
+          )}
+        </div>
+        {/* CANVAS EDITOR AS SIDE COLUMN */}
+        <div
+          className={`transition-all duration-500 ease-in-out border-l border-gray-600 bg-gray-900 overflow-hidden ${
+            isEditorOpen && getActiveDocument()
+              ? "w-[clamp(350px,45vw,700px)] min-w-[350px] opacity-100"
+              : "w-0 min-w-0 opacity-0"
+          }`}
+          style={{ boxShadow: isEditorOpen ? "-2px 0 16px rgba(0,0,0,0.12)" : undefined }}
+        >
+          {isEditorOpen && getActiveDocument() && (
+            <CanvasTextEditor
+              value={getActiveDocument() as EditorDocumentContent}
+              onSave={updateDocument}
+              onClose={closeEditor}
+              isStreaming={isLoading && streamingMessageId === activeDocumentId}
+            />
+          )}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 }

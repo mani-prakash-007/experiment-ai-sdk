@@ -1,6 +1,8 @@
 'use client';
 
-import { User, Bot, FileText, ExternalLink, Image as ImageIcon, Paperclip } from 'lucide-react';
+import {
+  User, Bot, FileText, ExternalLink, Image as ImageIcon, Paperclip
+} from 'lucide-react';
 import { Message } from '@/app/types/chat';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -9,6 +11,8 @@ interface ChatBubbleProps {
   user: SupabaseUser | null;
   onDocumentClick: (messageId: string, document: Message['document']) => void;
   isError?: boolean;
+  isStreaming?: boolean;
+  isActiveStream?: boolean;
 }
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({
@@ -16,16 +20,23 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   user,
   onDocumentClick,
   isError = false,
+  isStreaming = false,
+  isActiveStream = false,
 }) => {
   const renderFileContent = (fileData: any) => {
     if (!fileData) return null;
+
+  function prettySize( bytes : number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  return `${bytes} B`;
+}
     return (
       <div className="mt-3 pt-2">
-        {/* Image Files */}
         {fileData.metadata?.type?.startsWith('image/') && (
           <div className="space-y-2">
-            <img 
-              src={fileData.fileUrl} 
+            <img
+              src={fileData.fileUrl}
               alt={fileData.fileName}
               className="max-w-full h-auto rounded-lg border border-gray-300 shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
               style={{ maxHeight: '300px' }}
@@ -38,10 +49,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             </div>
           </div>
         )}
-        {/* PDF Files */}
         {fileData.metadata?.type === 'application/pdf' && (
           <div className="space-y-2 max-w-[300px]">
-            <div 
+            <div
               className="flex items-center space-x-3 p-3 bg-red-50 border border-red-200 rounded-lg cursor-pointer hover:bg-red-100 transition-colors w-full"
               onClick={() => window.open(fileData?.fileUrl, '_blank')}
             >
@@ -60,11 +70,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             </div>
           </div>
         )}
-        {/* Text Files */}
-        {(fileData.metadata?.type?.startsWith('text/') || 
+        {(fileData.metadata?.type?.startsWith('text/') ||
           fileData.fileName?.match(/\.(txt|md|json|js|ts|jsx|tsx|css|html|xml|csv)$/i)) && (
           <div className="space-y-2 max-w-[300px]">
-            <div 
+            <div
               className="flex items-center space-x-3 p-3 bg-green-50 border border-green-200 rounded-lg cursor-pointer hover:bg-green-100 transition-colors"
               onClick={() => window.open(fileData?.fileUrl, '_blank')}
             >
@@ -83,32 +92,31 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             </div>
           </div>
         )}
-        {/* Generic File Fallback */}
-        {fileData.metadata?.type && 
-        !fileData.metadata.type.startsWith('image/') && 
-        fileData.metadata.type !== 'application/pdf' && 
-        !fileData.metadata.type.startsWith('text/') && 
-        !fileData.fileName?.match(/\.(txt|md|json|js|ts|jsx|tsx|css|html|xml|csv)$/i) && (
-          <div className="space-y-2 max-w-[300px]">
-            <div 
-              className="flex items-center space-x-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
-              onClick={() => window.open(fileData?.fileUrl, '_blank')}
-            >
-              <div className="flex-shrink-0">
-                <Paperclip className="w-8 h-8 text-gray-600" />
+        {fileData.metadata?.type &&
+          !fileData.metadata.type.startsWith('image/') &&
+          fileData.metadata.type !== 'application/pdf' &&
+          !fileData.metadata.type.startsWith('text/') &&
+          !fileData.fileName?.match(/\.(txt|md|json|js|ts|jsx|tsx|css|html|xml|csv)$/i) && (
+            <div className="space-y-2 max-w-[300px]">
+              <div
+                className="flex items-center space-x-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={() => window.open(fileData?.fileUrl, '_blank')}
+              >
+                <div className="flex-shrink-0">
+                  <Paperclip className="w-8 h-8 text-gray-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {fileData.fileName}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    {fileData.metadata.type} • {prettySize(fileData.metadata.size)}
+                  </p>
+                </div>
+                <ExternalLink className="w-4 h-4 text-gray-600" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {fileData.fileName}
-                </p>
-                <p className="text-xs text-gray-600">
-                  {fileData.metadata.type} • {(fileData.metadata.size / 1024).toFixed(1)} KB
-                </p>
-              </div>
-              <ExternalLink className="w-4 h-4 text-gray-600" />
             </div>
-          </div>
-        )}
+          )}
       </div>
     );
   };
@@ -123,21 +131,60 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     </div>
   );
 
-const renderGeneratingLoading = () => (
-  <div className="flex items-center">
-    <span className="text-sm text-gray-300">Generating</span>
-    <span className="flex items-center ml-2 space-x-1">
-      <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-      <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-      <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-    </span>
-  </div>
-);
+  const renderGeneratingLoading = () => (
+    <div className="flex items-center">
+      <span className="text-sm text-gray-300">Generating</span>
+      <span className="flex items-center ml-2 space-x-1">
+        <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+        <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+        <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+      </span>
+    </div>
+  );
 
+  // ENHANCED MAIN CONTENT RENDER LOGIC:
+  const renderMessageContent = () => {
+    const isAssistant = message.role === 'assistant';
+    const hasContent = typeof message.content === 'string' && message.content.trim().length > 0;
+    const hasDocument = !!(message.document && typeof message.document.content === 'string' && message.document.content.trim().length > 0);
 
+    // 1. If actively streaming this bubble, show loading or stream content
+    if (isStreaming && isActiveStream) {
+      return hasContent ? message.content : renderGeneratingLoading();
+    }
 
-  // Initial loading bubble (stream start)
-  if ( message.id === 'loading') {
+    // 2. Assistant message logic (after streaming done)
+    if (isAssistant) {
+      if (hasContent) return message.content;
+      if (hasDocument) {
+        return (
+          <div className="text-sm opacity-90">
+            <span className="italic">Document generated. No message content.</span>
+            <div className="text-xs mt-1 opacity-75">
+              Click below to view the document.
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div className="text-sm opacity-75 italic text-red-300">
+          Response generated but no content available.
+        </div>
+      );
+    }
+
+    // 3. User messages
+    if (hasContent) return message.content;
+
+    // 4. Fallback for empty user message (never showing during streaming)
+    return (
+      <div className="text-sm opacity-75 italic">
+        Message sent.
+      </div>
+    );
+  };
+
+  if (message.id === 'loading') {
     return (
       <div className="flex items-start space-x-3">
         <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
@@ -149,7 +196,6 @@ const renderGeneratingLoading = () => (
       </div>
     );
   }
-
   if (isError) {
     return (
       <div className="flex items-start space-x-3">
@@ -189,11 +235,7 @@ const renderGeneratingLoading = () => (
           onClick={() => message.document?.content && onDocumentClick(message.id, message.document)}
         >
           <div className="prose prose-invert max-w-none text-sm leading-relaxed">
-            {message?.content ? (
-              message.content
-            ) : (
-             renderGeneratingLoading()
-            )}
+            {renderMessageContent()}
           </div>
           {renderFileContent(message.file_data)}
           {message?.document?.content && (

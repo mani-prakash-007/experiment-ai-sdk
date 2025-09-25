@@ -339,6 +339,12 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
     }
   };
 
+  function prettySize( bytes : number) {
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed (2)} MB`;
+    if (bytes >= 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+    return `${bytes} B`;
+  }
+
   return (
     <div>
       {/* Error Display */}
@@ -374,7 +380,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                 {uploadedFile.fileName}
               </span>
               <span className="text-xs text-slate-500">
-                {getFileTypeFromMime(uploadedFile.metadata.type).toUpperCase()} • {(uploadedFile.metadata.size / 1024 / 1024).toFixed(2)}MB
+                {getFileTypeFromMime(uploadedFile.metadata.type).toUpperCase()} • {prettySize(uploadedFile.metadata.size)}
               </span>
             </div>
             <button
