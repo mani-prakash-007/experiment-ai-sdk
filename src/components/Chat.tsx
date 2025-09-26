@@ -61,6 +61,7 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
+  console.log('Active DocumentID : ', activeDocumentId);
   const [selectedModel, setSelectedModel] = useState<ModelOption>({
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
@@ -210,6 +211,7 @@ export default function Chat() {
     aiSubmittedSession.current = activeSessionId;
     setStreamingStarted(false);
     submit({ messages: contextToSend, model: selectedModel });
+    setIsEditorOpen(false);
   };
 
   useEffect(() => {

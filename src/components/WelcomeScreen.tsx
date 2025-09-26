@@ -4,7 +4,6 @@ import React from 'react';
 import { MessageSquare, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ChatSession } from '@/app/types/chat';
 
 interface WelcomeScreenProps {
   createSession: () => Promise<string | null>;

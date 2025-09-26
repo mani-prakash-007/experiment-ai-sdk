@@ -5,6 +5,9 @@ import {
 } from 'lucide-react';
 import { Message } from '@/app/types/chat';
 import { User as SupabaseUser } from '@supabase/supabase-js';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
 interface ChatBubbleProps {
   message: Message;
@@ -132,15 +135,95 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   );
 
   const renderGeneratingLoading = () => (
-    <div className="flex items-center">
-      <span className="text-sm text-gray-300">Generating</span>
-      <span className="flex items-center ml-2 space-x-1">
-        <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-        <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-        <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+    <div className="text-sm">
+      <div className="flex items-center">
+      <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '0ms' }}></div>
+      <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '150ms' }}></div>
+      <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce mr-2" style={{ animationDelay: '300ms' }}></div>
+      <span className="animate-pulse bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 text-transparent bg-clip-text">
+        Generating
       </span>
+      </div>
     </div>
   );
+
+  const markdownComponents = {
+    code: ({ node, inline, className, children, ...props }: any) => {
+      const match = /language-(\w+)/.exec(className || '');
+      return !inline && match ? (
+        <SyntaxHighlighter
+          style={oneDark}
+          language={match[1]}
+          PreTag="div"
+          className="rounded-lg !bg-gray-900 !p-4 !my-4"
+          {...props}
+        >
+          {String(children).replace(/\n$/, '')}
+        </SyntaxHighlighter>
+      ) : (
+        <code className="bg-gray-700 text-purple-300 px-1.5 py-0.5 rounded text-sm" {...props}>
+          {children}
+        </code>
+      );
+    },
+    p: ({ children }: any) => (
+      <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>
+    ),
+    h1: ({ children }: any) => (
+      <h1 className="text-xl font-bold mb-3 text-white">{children}</h1>
+    ),
+    h2: ({ children }: any) => (
+      <h2 className="text-lg font-bold mb-3 text-white">{children}</h2>
+    ),
+    h3: ({ children }: any) => (
+      <h3 className="text-base font-bold mb-2 text-white">{children}</h3>
+    ),
+    ul: ({ children }: any) => (
+      <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>
+    ),
+    ol: ({ children }: any) => (
+      <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>
+    ),
+    li: ({ children }: any) => (
+      <li className="text-gray-100">{children}</li>
+    ),
+    blockquote: ({ children }: any) => (
+      <blockquote className="border-l-4 border-purple-400 pl-4 my-3 italic text-gray-300">
+        {children}
+      </blockquote>
+    ),
+    a: ({ href, children }: any) => (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-400 hover:text-blue-300 underline"
+      >
+        {children}
+      </a>
+    ),
+    strong: ({ children }: any) => (
+      <strong className="font-bold text-white">{children}</strong>
+    ),
+    em: ({ children }: any) => (
+      <em className="italic text-gray-300">{children}</em>
+    ),
+    table: ({ children }: any) => (
+      <div className="overflow-x-auto my-3">
+        <table className="min-w-full border-collapse border border-gray-600">
+          {children}
+        </table>
+      </div>
+    ),
+    th: ({ children }: any) => (
+      <th className="border border-gray-600 px-3 py-2 bg-gray-700 text-left font-semibold">
+        {children}
+      </th>
+    ),
+    td: ({ children }: any) => (
+      <td className="border border-gray-600 px-3 py-2">{children}</td>
+    ),
+  };
 
   // ENHANCED MAIN CONTENT RENDER LOGIC:
   const renderMessageContent = () => {
@@ -153,7 +236,13 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       if (hasContent) {
         return (
           <div>
-            {message.content}
+            {isAssistant ? (
+              <ReactMarkdown components={markdownComponents}>
+                {message.content}
+              </ReactMarkdown>
+            ) : (
+              message.content
+            )}
             {!hasDocument && (
               <div className="mt-2 text-xs text-blue-300 opacity-75 animate-pulse">
                 <div className="flex items-center">
@@ -173,7 +262,13 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
     // 2. Assistant message logic (after streaming done)
     if (isAssistant) {
-      if (hasContent) return message.content;
+      if (hasContent) {
+        return (
+          <ReactMarkdown components={markdownComponents}>
+            {message.content}
+          </ReactMarkdown>
+        );
+      }
       if (hasDocument) {
         return (
           <div className="text-sm opacity-90">
@@ -252,7 +347,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           } ${message.document_id ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border-white/50' : ''}`}
           onClick={() => message.document_id && onDocumentClick(message.id, message.document_id)}
         >
-          <div className="prose prose-invert max-w-none text-sm leading-relaxed">
+          <div className={`max-w-none text-sm leading-relaxed ${
+            message.role === 'assistant' ? 'prose-markdown' : ''
+          }`}>
             {renderMessageContent()}
           </div>
           {renderFileContent(message.file_data)}

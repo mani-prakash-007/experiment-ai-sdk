@@ -24,6 +24,7 @@ export const ChatSidebar: React.FC = () => {
     loading,
     createSession,
     deleteSession,
+    refreshSessions
   } = useChatSessions(user?.id);
 
   const handleNewSession = async () => {
@@ -125,6 +126,12 @@ export const ChatSidebar: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (sidebarOpen ) {
+      refreshSessions();
+    }
+  }, [ sidebarOpen]);
 
   return (
     <>
