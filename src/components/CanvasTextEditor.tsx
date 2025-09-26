@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import { createPortal } from 'react-dom';
 import StarterKit from '@tiptap/starter-kit';
@@ -47,7 +47,7 @@ type EditorDocumentContent = {
 };
 
 type Props = {
-  documentId: string; // Changed from value prop to documentId
+  documentId: string;
   onSave: (newValue: EditorDocumentContent) => void;
   onClose?: () => void;
   isStreaming?: boolean;
@@ -158,6 +158,9 @@ const ACTION_BUTTONS = [
 const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStreaming = false }) => {
   const { getDocument, getDocumentVersion, getVersionMetaList, loading: documentLoading, error: documentError } = useDocuments();
   
+  const [transitionOpacity, setTransitionOpacity] = useState(1);
+  const [currentDocumentId, setCurrentDocumentId] = useState(documentId);
+  
   const [editable, setEditable] = useState(false);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
@@ -180,6 +183,18 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; right: number } | null>(null);
   const [dropdownButtonRef, setDropdownButtonRef] = useState<HTMLButtonElement | null>(null);
 
+  // Auto-save states
+  const [lastActivity, setLastActivity] = useState<number>(Date.now());
+  const [inactivityTimer, setInactivityTimer] = useState<NodeJS.Timeout | null>(null);
+  const [countdownTimer, setCountdownTimer] = useState<NodeJS.Timeout | null>(null);
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(0);
+  const [isCountingDown, setIsCountingDown] = useState(false);
+  const [shouldAutoSave, setShouldAutoSave] = useState(false);
+  
+  // Ref to prevent duplicate saves and toasts
+  const isSavingRef = useRef(false);
+  const autoSaveToastShownRef = useRef(false);
+
   const estimatedReadTime = estimateReadingTime(content);
 
   const editor = useEditor({
@@ -198,8 +213,8 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
     editorProps: {
       attributes: {
         class: editable
-          ? 'tiptap-editor dark w-full min-h-[180px] bg-transparent text-zinc-100 focus:outline-none'
-          : 'tiptap-editor dark w-full min-h-[180px] bg-transparent text-zinc-100 pointer-events-none select-text',
+          ? 'tiptap-editor dark w-full min-h-[180px] bg-transparent text-zinc-100 focus:outline-none transition-opacity duration-300'
+          : 'tiptap-editor dark w-full min-h-[180px] bg-transparent text-zinc-100 pointer-events-none select-text transition-opacity duration-300',
         spellCheck: 'true',
         autoCorrect: 'on',
         autoCapitalize: 'sentences'
@@ -208,49 +223,64 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
     immediatelyRender: false
   });
 
-  // Reset all states when documentId changes
+  // Smooth document transition when documentId changes
   useEffect(() => {
-    if (documentId) {
-      // Reset all states to initial values
-      setEditable(false);
-      setTitle('');
-      setCategory('');
-      setTags([]);
-      setNewTag('');
-      setContent('');
-      setPristine({
-        title: '',
-        content: '',
-        extra: {}
-      });
-      setHasUnsaved(false);
-      setIsStreamingActive(false);
-      setDocumentNotFound(false);
-      setDocumentFetched(false);
-      setVersions([]);
-      setCurrentVersion(null);
-      setIsVersionDropdownOpen(false);
-      setIsViewingVersion(false);
-      setDropdownPosition(null);
+    if (documentId !== currentDocumentId && currentDocumentId) {
+      setTransitionOpacity(0);
       
-      // Reset editor content
-      if (editor) {
-        editor.commands.setContent('');
-      }
-    }
-  }, [documentId, editor]);
+      // Small delay to allow fade out
+      const transitionTimer = setTimeout(() => {
+        // Reset states for new document
+        setEditable(false);
+        setTitle('');
+        setCategory('');
+        setTags([]);
+        setNewTag('');
+        setContent('');
+        setPristine({
+          title: '',
+          content: '',
+          extra: {}
+        });
+        setHasUnsaved(false);
+        setIsStreamingActive(false);
+        setDocumentNotFound(false);
+        setDocumentFetched(false);
+        setVersions([]);
+        setCurrentVersion(null);
+        setIsVersionDropdownOpen(false);
+        setIsViewingVersion(false);
+        setDropdownPosition(null);
+        
+        // Clear editor content smoothly
+        if (editor) {
+          editor.commands.setContent('');
+        }
+        
+        setCurrentDocumentId(documentId);
+        
+        // Fade back in
+        setTimeout(() => {
+          setTransitionOpacity(1);
+        }, 50);
+      }, 200);
 
-  // Fetch document data when documentId changes
+      return () => clearTimeout(transitionTimer);
+    } else if (!currentDocumentId) {
+      setCurrentDocumentId(documentId);
+    }
+  }, [documentId, currentDocumentId, editor]);
+
+  // Fetch document data when currentDocumentId changes (not original documentId)
   useEffect(() => {
     const fetchDocument = async () => {
-      if (!documentId) {
+      if (!currentDocumentId) {
         setDocumentFetched(false);
         return;
       }
       
-      // Always fetch fresh data since we reset states above
       try {
-        const doc = await getDocument(documentId);
+        const doc = await getDocument(currentDocumentId);
         if (doc) {
           setTitle(doc.title || '');
           setCategory(doc.extra?.category || '');
@@ -270,12 +300,13 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
           setDocumentNotFound(false);
           setDocumentFetched(true);
 
-          // Update editor content if needed
+          // Update editor content with smooth transition
           if (editor && editor.getHTML() !== doc.content) {
-            editor.commands.setContent(doc.content || '');
+            setTimeout(() => {
+              editor.commands.setContent(doc.content || '');
+            }, 100);
           }
         } else {
-          // Document might not exist yet if streaming just started
           if (!isStreaming) {
             setDocumentNotFound(true);
             setDocumentFetched(true);
@@ -291,18 +322,17 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
     };
 
     fetchDocument();
-  }, [documentId, getDocument, isStreaming, editor]);
+  }, [currentDocumentId, getDocument, isStreaming, editor]);
 
-  // Fetch versions when document loads
+  // Fetch versions when document loads (use currentDocumentId)
   useEffect(() => {
     const fetchVersions = async () => {
-      if (!documentId || !documentFetched) return;
+      if (!currentDocumentId || !documentFetched) return;
       
       try {
-        const versionsList = await getVersionMetaList(documentId);
+        const versionsList = await getVersionMetaList(currentDocumentId);
         setVersions(versionsList);
         if (versionsList.length > 0 && currentVersion === null) {
-          // Set current version to latest (highest version number)
           const latestVersion = Math.max(...versionsList.map(v => v.version_number));
           setCurrentVersion(latestVersion);
         }
@@ -312,7 +342,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
     };
 
     fetchVersions();
-  }, [documentId, getVersionMetaList, documentFetched, currentVersion]);
+  }, [currentDocumentId, getVersionMetaList, documentFetched, currentVersion]);
 
   // Handle streaming state changes
   useEffect(() => {
@@ -321,22 +351,8 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
       setEditable(false);
     } else if (isStreamingActive) {
       setIsStreamingActive(false);
-      setEditable(false);
-      // Reset document fetched flag to allow refetch after streaming
-      setDocumentFetched(false);
-    }
-  }, [isStreaming, isStreamingActive]);
-
-  // Remove the polling logic since we're not updating during streaming
-  useEffect(() => {
-    if (isStreaming) {
-      setIsStreamingActive(true);
-      setEditable(false);
-    } else if (isStreamingActive) {
-      setIsStreamingActive(false);
-      // Refetch document when streaming ends
       const refetchDocument = async () => {
-        const doc = await getDocument(documentId);
+        const doc = await getDocument(currentDocumentId);
         if (doc) {
           setTitle(doc.title || '');
           setCategory(doc.extra?.category || '');
@@ -361,7 +377,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
       };
       refetchDocument();
     }
-  }, [isStreaming, isStreamingActive, documentId, getDocument, editor]);
+  }, [isStreaming, isStreamingActive, currentDocumentId, getDocument, editor]);
 
   // When entering edit mode, remember pristine
   const enterEdit = () => {
@@ -407,36 +423,236 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
     }
   }, [editor, editable]);
 
-  const handleSave = async () => {
-    if (!hasUnsaved) return;
-    const updatedDoc: EditorDocumentContent = {
-      title: title.trim() || 'Untitled Document',
-      content,
-      extra: {
-        estimatedReadTime,
-        category: category.trim(),
-        tags: tags.filter(Boolean)
+  // Auto-save: Track user activity
+  const resetActivity = useCallback(() => {
+    setLastActivity(Date.now());
+    
+    // Clear existing timers
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+      setInactivityTimer(null);
+    }
+    if (countdownTimer) {
+      clearInterval(countdownTimer);
+      setCountdownTimer(null);
+    }
+    
+    setIsCountingDown(false);
+    setCountdownSeconds(0);
+    setShouldAutoSave(false);
+    autoSaveToastShownRef.current = false;
+  }, []); // Remove dependencies that cause re-renders
+
+  // Auto-save: Start countdown when inactive
+  const startCountdown = useCallback(() => {
+    setIsCountingDown(true);
+    setCountdownSeconds(20);
+    autoSaveToastShownRef.current = false;
+    
+    const timer = setInterval(() => {
+      setCountdownSeconds(prev => {
+        if (prev <= 1) {
+          // Clear timer first
+          clearInterval(timer);
+          setCountdownTimer(null);
+          setIsCountingDown(false);
+          setCountdownSeconds(0);
+          
+          // Schedule auto-save to happen after render
+          setShouldAutoSave(true);
+          
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    setCountdownTimer(timer);
+  }, []);
+
+  // Auto-save: Handle the actual save action outside of render cycles
+  useEffect(() => {
+    if (!shouldAutoSave || isSavingRef.current) return;
+
+    const performAutoSave = async () => {
+      if (!hasUnsaved || !editable || isSavingRef.current) {
+        setShouldAutoSave(false);
+        return;
+      }
+
+      isSavingRef.current = true;
+
+      try {
+        const updatedDoc: EditorDocumentContent = {
+          title: title.trim() || 'Untitled Document',
+          content,
+          extra: {
+            estimatedReadTime,
+            category: category.trim(),
+            tags: tags.filter(Boolean)
+          }
+        };
+
+        await onSave(updatedDoc);
+        setEditable(false);
+        setPristine(updatedDoc);
+        
+        // Show success toast only once
+        if (!autoSaveToastShownRef.current) {
+          autoSaveToastShownRef.current = true;
+        }
+
+        // Clear auto-save timers after successful save
+        setLastActivity(Date.now());
+        setIsCountingDown(false);
+        setCountdownSeconds(0);
+
+        // Re-fetch versions after save
+        setTimeout(async () => {
+          try {
+            const versionsList = await getVersionMetaList(currentDocumentId);
+            setVersions(versionsList);
+            if (versionsList.length > 0) {
+              const latestVersion = Math.max(...versionsList.map(v => v.version_number));
+              setCurrentVersion(latestVersion);
+              setIsViewingVersion(false);
+            }
+          } catch (error) {
+            console.error('Error re-fetching versions after save:', error);
+          }
+        }, 1000);
+      } catch (error) {
+        console.error('Auto-save failed:', error);
+        toast.error('Auto-save failed');
+      } finally {
+        isSavingRef.current = false;
+        setShouldAutoSave(false);
       }
     };
-    onSave(updatedDoc);
-    setEditable(false);
-    setPristine(updatedDoc);
+
+    // Use setTimeout to ensure this runs after current render cycle
+    const timeoutId = setTimeout(performAutoSave, 0);
     
-    // Re-fetch versions immediately after save
-    setTimeout(async () => {
-      try {
-      const versionsList = await getVersionMetaList(documentId);
-      setVersions(versionsList);
-      // Update current version to latest after save
-      if (versionsList.length > 0) {
-        const latestVersion = Math.max(...versionsList.map(v => v.version_number));
-        setCurrentVersion(latestVersion);
-        setIsViewingVersion(false); // Make sure we're not viewing an old version
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [shouldAutoSave]); // Minimal dependencies
+
+  // Auto-save: Monitor inactivity when in edit mode with unsaved changes
+  useEffect(() => {
+    if (!editable || !hasUnsaved || isStreaming || isStreamingActive) {
+      // Clear timers if not in valid auto-save state
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+        setInactivityTimer(null);
       }
-      } catch (error) {
-      console.error('Error re-fetching versions after save:', error);
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+        setCountdownTimer(null);
       }
-    }, 1000);
+      setIsCountingDown(false);
+      setCountdownSeconds(0);
+      setShouldAutoSave(false);
+      autoSaveToastShownRef.current = false;
+      return;
+    }
+
+    // Clear existing inactivity timer
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+    }
+
+    // Start new inactivity timer
+    const timer = setTimeout(() => {
+      if (hasUnsaved && editable && !isStreaming && !isStreamingActive && !isSavingRef.current) {
+        startCountdown();
+      }
+    }, 5000); // 5 seconds of inactivity
+
+    setInactivityTimer(timer);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [lastActivity, editable, hasUnsaved, isStreaming, isStreamingActive, startCountdown]); // Fixed dependencies
+
+  // Auto-save: Add event listeners for user activity
+  useEffect(() => {
+    if (!editable || !hasUnsaved) return;
+
+    const handleActivity = () => {
+      resetActivity();
+    };
+
+    const events = ['keydown', 'keyup', 'mousedown', 'mousemove', 'touchstart', 'scroll', 'focus', 'blur'];
+    
+    // Add listeners to document for global activity detection
+    events.forEach(event => {
+      document.addEventListener(event, handleActivity, true);
+    });
+
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, handleActivity, true);
+      });
+    };
+  }, [editable, hasUnsaved, resetActivity]);
+
+  // Auto-save: Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      if (countdownTimer) clearInterval(countdownTimer);
+    };
+  }, [inactivityTimer, countdownTimer]);
+
+  // Update save handler to use currentDocumentId
+  const handleSave = async () => {
+    if (!hasUnsaved || isSavingRef.current) return;
+    
+    isSavingRef.current = true;
+    
+    try {
+      const updatedDoc: EditorDocumentContent = {
+        title: title.trim() || 'Untitled Document',
+        content,
+        extra: {
+          estimatedReadTime,
+          category: category.trim(),
+          tags: tags.filter(Boolean)
+        }
+      };
+      
+      await onSave(updatedDoc);
+      setEditable(false);
+      setPristine(updatedDoc);
+      
+      // Clear auto-save timers after successful save
+      setLastActivity(Date.now());
+      setIsCountingDown(false);
+      setCountdownSeconds(0);
+      setShouldAutoSave(false);
+      autoSaveToastShownRef.current = false;
+      
+      setTimeout(async () => {
+        try {
+          const versionsList = await getVersionMetaList(currentDocumentId);
+          setVersions(versionsList);
+          if (versionsList.length > 0) {
+            const latestVersion = Math.max(...versionsList.map(v => v.version_number));
+            setCurrentVersion(latestVersion);
+            setIsViewingVersion(false);
+          }
+        } catch (error) {
+          console.error('Error re-fetching versions after save:', error);
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('Save failed:', error);
+      toast.error('Failed to save document');
+    } finally {
+      isSavingRef.current = false;
+    }
   };
 
   const handleDiscard = () => {
@@ -504,7 +720,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
       
       if (isLatestVersion) {
         // Switch to live/latest version
-        const doc = await getDocument(documentId);
+        const doc = await getDocument(currentDocumentId);
         if (doc) {
           setTitle(doc.title || '');
           setCategory(doc.extra?.category || '');
@@ -529,7 +745,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
         }
       } else {
         // Switch to specific version
-        const versionDoc = await getDocumentVersion(documentId, versionNumber);
+        const versionDoc = await getDocumentVersion(currentDocumentId, versionNumber);
         if (versionDoc) {
           setTitle(versionDoc.title || '');
           setCategory(versionDoc.extra?.category || '');
@@ -660,13 +876,16 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
   }
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-zinc-900 to-gray-800 rounded-xl shadow-xl border border-zinc-800">
+    <div 
+      className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-zinc-900 to-gray-800 rounded-xl shadow-xl border border-zinc-800 transition-all duration-300"
+      style={{ opacity: transitionOpacity }}
+    >
       {/* HEADER */}
-      <div className="border-b bg-gray-800/60 backdrop-blur-xl rounded-t-xl border-gray-700 p-6">
+      <div className="border-b bg-gray-800/60 backdrop-blur-xl rounded-t-xl border-gray-700 p-6 transition-all duration-300">
         <div className="flex items-center justify-between gap-4">
           {editable ? (
             <input
-              className="text-2xl font-extrabold text-white bg-transparent outline-none border-b-2 border-transparent focus:border-indigo-400 transition w-full max-w-lg"
+              className="text-2xl font-extrabold text-white bg-transparent outline-none border-b-2 border-transparent focus:border-indigo-400 transition-all duration-300 w-full max-w-lg"
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="Untitled Document"
@@ -674,11 +893,11 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
             />
           ) : (
             <div className="flex items-center gap-3">
-              <div className="text-2xl font-extrabold text-indigo-100 tracking-wide mb-1 select-text break-words">
+              <div className="text-2xl font-extrabold text-indigo-100 tracking-wide mb-1 select-text break-words transition-all duration-300">
                 {title || "Untitled Document"}
               </div>
               {(isStreaming || isStreamingActive) && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-blue-600/20 border border-blue-500/30 rounded-full">
+                <div className="flex items-center gap-2 px-3 py-1 bg-blue-600/20 border border-blue-500/30 rounded-full animate-fade-in">
                   <div className="flex space-x-1">
                     <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                     <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
@@ -769,7 +988,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
             )}
           </div>
         </div>
-        <div className="flex items-center flex-wrap gap-2 mt-5">
+        <div className="flex items-center flex-wrap gap-2 mt-5 transition-all duration-300">
           {editable ? (
             <input
               className="px-2 py-1 bg-blue-600 text-blue-100 text-xs rounded-full max-w-xs outline-none border border-transparent focus:border-blue-200 transition"
@@ -820,7 +1039,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
             </>
           )}
         </div>
-        <div className="flex mt-5 text-sm text-gray-400 items-center">
+        <div className="flex mt-5 text-sm text-gray-400 items-center transition-all duration-300">
            <div className="flex items-center gap-2 px-3 py-1 bg-green-600/20 border border-green-500/30 rounded-full mx-1">
               <Book className="w-4 h-4 text-green-300" />
               <span className="text-green-300 text-sm font-medium">Reading Time: {estimatedReadTime}</span>
@@ -835,15 +1054,16 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
       </div>
 
       {/* Rich Text Editor Scrollable Main */}
-      <div className="flex flex-col flex-1 min-h-0">
-          {
-            editable && 
-            <div className="bg-zinc-900 border-b border-zinc-800 px-4 py-2">
-               <MenuBar editor={editor} editable={editable} />
-            </div>
-          }
-        <div className={`${editable ? '' : 'select-text'} px-4 pt-6 pb-2 flex-1 min-h-0 overflow-y-auto`}>
-          <EditorContent editor={editor} />
+      <div className="flex flex-col flex-1 min-h-0 transition-all duration-300">
+        {editable && 
+          <div className="bg-zinc-900 border-b border-zinc-800 px-4 py-2 transition-all duration-300">
+            <MenuBar editor={editor} editable={editable} />
+          </div>
+        }
+        <div className={`${editable ? '' : 'select-text'} px-4 pt-6 pb-2 flex-1 min-h-0 overflow-y-auto transition-all duration-300`}>
+          <div style={{ opacity: transitionOpacity }}>
+            <EditorContent editor={editor} />
+          </div>
         </div>
         <div className="border-t border-zinc-800 px-4 py-2 bg-zinc-900 rounded-b-lg shrink-0">
           <div className="flex justify-between items-center text-sm text-zinc-400">
@@ -862,6 +1082,23 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
                 </span>
               ) : null}
             </div>
+            
+            {/* Auto-save countdown timer */}
+            {isCountingDown && editable && hasUnsaved && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-orange-600/20 border border-orange-500/30 rounded-full animate-pulse">
+                <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce"></div>
+                <span className="text-orange-300 text-sm font-medium">
+                  Auto-saving in {countdownSeconds}s
+                </span>
+                <button
+                  onClick={resetActivity}
+                  className="text-orange-300 hover:text-orange-100 transition-colors"
+                  title="Cancel auto-save"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -927,11 +1164,12 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
         document.body
       )}
 
-      {/* Styles */}
+      {/* Enhanced Styles with transitions */}
       <style>{`
         .tiptap-editor p, .tiptap-editor ul, .tiptap-editor ol, .tiptap-editor blockquote, .tiptap-editor pre, .tiptap-editor h1, .tiptap-editor h2, .tiptap-editor h3 {
           margin: 0;
           padding: 8px 0;
+          transition: all 0.3s ease;
         }
         .tiptap-editor ul { list-style-type: disc; padding-left: 1.15em; }
         .tiptap-editor ol { list-style-type: decimal; padding-left: 1.2em; }
@@ -941,6 +1179,20 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
         .tiptap-editor h3 { font-size: 1.25em; font-weight: bold; }
         .tiptap-editor blockquote { border-left: 3px solid #6366f1; padding-left: 1em; color: #a5b4fc; font-style: italic;}
         .tiptap-editor pre { background: #232324; color: #facc15; border-radius: 6px; padding: 12px; }
+        
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .animate-fade-in {
+          animation: fade-in 0.3s ease-out;
+        }
+        
+        .transition-all {
+          transition-property: all;
+          transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        }
       `}</style>
     </div>
   );
