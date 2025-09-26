@@ -33,7 +33,6 @@ export const ChatSidebar: React.FC = () => {
       router.push(`/chat/${sessionId}`);
       toast.success('New session created');
     }
-    setSidebarOpen(true);
   };
 
   const handleSessionSelect = (sessionId: string) => {
