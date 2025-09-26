@@ -34,6 +34,7 @@ import {
 } from 'react-icons/ri';
 import { toast } from 'sonner';
 import { useDocuments } from '@/app/hooks/useDocument';
+import { Book } from 'lucide-react';
 
 type EditorDocumentContent = {
   title: string;
@@ -422,7 +423,8 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
     setPristine(updatedDoc);
     
     // Re-fetch versions immediately after save
-    try {
+    setTimeout(async () => {
+      try {
       const versionsList = await getVersionMetaList(documentId);
       setVersions(versionsList);
       // Update current version to latest after save
@@ -431,9 +433,10 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
         setCurrentVersion(latestVersion);
         setIsViewingVersion(false); // Make sure we're not viewing an old version
       }
-    } catch (error) {
+      } catch (error) {
       console.error('Error re-fetching versions after save:', error);
-    }
+      }
+    }, 1000);
   };
 
   const handleDiscard = () => {
@@ -684,12 +687,6 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
                   <span className="text-blue-300 text-sm font-medium">Generating...</span>
                 </div>
               )}
-              {isViewingVersion && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-amber-600/20 border border-amber-500/30 rounded-full">
-                  <History className="w-4 h-4 text-amber-300" />
-                  <span className="text-amber-300 text-sm font-medium">Viewing Version {currentVersion}</span>
-                </div>
-              )}
             </div>
           )}
           <div className="flex items-center space-x-2">
@@ -823,9 +820,17 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
             </>
           )}
         </div>
-        <div className="flex mt-5 text-sm text-gray-400">
-          <span className="font-bold pr-2">Reading Time:</span>
-          <span>{estimatedReadTime}</span>
+        <div className="flex mt-5 text-sm text-gray-400 items-center">
+           <div className="flex items-center gap-2 px-3 py-1 bg-green-600/20 border border-green-500/30 rounded-full mx-1">
+              <Book className="w-4 h-4 text-green-300" />
+              <span className="text-green-300 text-sm font-medium">Reading Time: {estimatedReadTime}</span>
+            </div>
+              {isViewingVersion && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-amber-600/20 border border-amber-500/30 rounded-full mx-1">
+                  <History className="w-4 h-4 text-amber-300" />
+                  <span className="text-amber-300 text-sm font-medium">Viewing Version {currentVersion}</span>
+                </div>
+              )}
         </div>
       </div>
 
