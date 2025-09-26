@@ -181,7 +181,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
 
   const estimatedReadTime = estimateReadingTime(content);
 
-    const editor = useEditor({
+  const editor = useEditor({
     extensions: [
       StarterKit,
       Underline,
@@ -207,6 +207,38 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
     immediatelyRender: false
   });
 
+  // Reset all states when documentId changes
+  useEffect(() => {
+    if (documentId) {
+      // Reset all states to initial values
+      setEditable(false);
+      setTitle('');
+      setCategory('');
+      setTags([]);
+      setNewTag('');
+      setContent('');
+      setPristine({
+        title: '',
+        content: '',
+        extra: {}
+      });
+      setHasUnsaved(false);
+      setIsStreamingActive(false);
+      setDocumentNotFound(false);
+      setDocumentFetched(false);
+      setVersions([]);
+      setCurrentVersion(null);
+      setIsVersionDropdownOpen(false);
+      setIsViewingVersion(false);
+      setDropdownPosition(null);
+      
+      // Reset editor content
+      if (editor) {
+        editor.commands.setContent('');
+      }
+    }
+  }, [documentId, editor]);
+
   // Fetch document data when documentId changes
   useEffect(() => {
     const fetchDocument = async () => {
@@ -215,9 +247,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
         return;
       }
       
-      // Prevent refetching the same document
-      if (documentFetched && !isStreaming) return;
-      
+      // Always fetch fresh data since we reset states above
       try {
         const doc = await getDocument(documentId);
         if (doc) {
@@ -260,7 +290,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
     };
 
     fetchDocument();
-  }, [documentId, getDocument, isStreaming, editor, documentFetched]);
+  }, [documentId, getDocument, isStreaming, editor]);
 
   // Fetch versions when document loads
   useEffect(() => {
@@ -376,7 +406,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
     }
   }, [editor, editable]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!hasUnsaved) return;
     const updatedDoc: EditorDocumentContent = {
       title: title.trim() || 'Untitled Document',
@@ -390,6 +420,20 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
     onSave(updatedDoc);
     setEditable(false);
     setPristine(updatedDoc);
+    
+    // Re-fetch versions immediately after save
+    try {
+      const versionsList = await getVersionMetaList(documentId);
+      setVersions(versionsList);
+      // Update current version to latest after save
+      if (versionsList.length > 0) {
+        const latestVersion = Math.max(...versionsList.map(v => v.version_number));
+        setCurrentVersion(latestVersion);
+        setIsViewingVersion(false); // Make sure we're not viewing an old version
+      }
+    } catch (error) {
+      console.error('Error re-fetching versions after save:', error);
+    }
   };
 
   const handleDiscard = () => {
