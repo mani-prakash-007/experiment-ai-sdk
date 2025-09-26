@@ -17,9 +17,13 @@ import { toast } from "sonner";
 
 const MODEL_OPTIONS: { [key: string]: ModelOption[] } = {
   'Google': [
-    { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
-    { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", provider: "Google" },
+    { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "Google" },
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "Google" },
   ],
+  //   OpenAI: [
+  //   { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI" },
+  //   { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", provider: "OpenAI" },
+  // ],
   // 'Claude': [
   //   { id: "claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic" },
   //   { id: "claude-3-sonnet", name: "Claude 3 Sonnet", provider: "Anthropic" },
@@ -30,8 +34,6 @@ const MODEL_OPTIONS: { [key: string]: ModelOption[] } = {
 //   { id: "sonar-reasoning", name: "Sonar Reasoning — Fast Problem-Solving", provider: "Perplexity" },
 //   { id: "sonar-deep-research", name: "Sonar Deep Research — Comprehensive Reports", provider: "Perplexity" },
 // ],
-
-
 };
 
 // Updated file type detection
@@ -559,7 +561,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
         {selectedModel && (
           <div className="relative px-3 pb-2">
             <div className="flex items-center space-x-2">
-              <span className="text-xs text-slate-400">{selectedModel.id === 'gemini-1.5-flash-001' ? 'Default Model :' : 'Model :'}</span>
+              <span className="text-xs text-slate-400">{selectedModel.id === 'gemini-2.5-flash' ? 'Default Model :' : 'Model :'}</span>
               <div className="inline-flex items-center px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded-full border border-blue-500/30">
                 <Sparkles className="w-3 h-3 mr-1" />
                 {selectedModel.provider} {selectedModel.name}
