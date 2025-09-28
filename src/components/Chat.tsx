@@ -10,7 +10,8 @@ import { useAuth } from '@/app/hooks/useAuth';
 import { useChatSessions } from '@/app/hooks/useChatSessions';
 import { useChatMessages } from '@/app/hooks/useChatMessages';
 import { useDocuments } from '@/app/hooks/useDocument';
-import { Message, ModelOption, UploadedFile } from '@/app/types/chat';
+import { Message, ModelOption, UploadedFile, UploadedFileWithUrl } from '@/app/types/chat';
+import { generatePresignedUrl } from '@/utils/presignedUrls';
 import { toast } from 'sonner';
 import { useParams } from 'next/navigation';
 import { ChatBubble } from '@/components/ChatBubble';
@@ -66,7 +67,7 @@ export default function Chat() {
     name: 'Gemini 2.5 Flash',
     provider: 'Google'
   });
-  const [uploadedFile, setUploadedFile] = useState<UploadedFile>();
+  const [uploadedFile, setUploadedFile] = useState<UploadedFile | UploadedFileWithUrl>();
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [streamingStarted, setStreamingStarted] = useState(false);
@@ -172,11 +173,25 @@ export default function Chat() {
 
     setShouldAutoScroll(true); // Enable scroll to bottom for new chat response
 
+    // Generate presigned URL for file if needed for LLM context
+    let fileForLLM: UploadedFileWithUrl | undefined;
+    if (uploadedFile) {
+      // Generate presigned URL for LLM context
+      const presignedData = await generatePresignedUrl(uploadedFile.storagePath, 7200); // 2 hours for LLM processing
+      if (presignedData) {
+        fileForLLM = {
+          ...uploadedFile,
+          fileUrl: presignedData.signedUrl,
+          urlExpiresAt: presignedData.expiresAt
+        };
+      }
+    }
+
     const userMessage: Omit<Message, 'id' | 'created_at'> = {
       session_id: activeSessionId,
       role: 'user',
       content: input,
-      file_data: uploadedFile
+      file_data: uploadedFile // Store without URL in database
     };
 
     setInput('');
@@ -198,14 +213,32 @@ export default function Chat() {
       contextToSend = [{
         role: addedMessage.role,
         content: addedMessage.content,
-        file: addedMessage.file_data
+        file: fileForLLM // Send with presigned URL to LLM
       }];
     } else {
-      contextToSend = [...messages, addedMessage].map(msg => ({
-        role: msg.role,
-        content: msg.content,
-        file: msg.file_data
-      }));
+      // Generate presigned URLs for all historical messages with files
+      const messagesWithUrls = await Promise.all(
+        [...messages, addedMessage].map(async (msg) => {
+          if (msg.file_data) {
+            const presignedData = await generatePresignedUrl(msg.file_data.storagePath, 7200);
+            return {
+              role: msg.role,
+              content: msg.content,
+              file: presignedData ? {
+                ...msg.file_data,
+                fileUrl: presignedData.signedUrl,
+                urlExpiresAt: presignedData.expiresAt
+              } : undefined
+            };
+          }
+          return {
+            role: msg.role,
+            content: msg.content,
+            file: msg.file_data
+          };
+        })
+      );
+      contextToSend = messagesWithUrls;
     }
     aiSubmittedSession.current = activeSessionId;
     setStreamingStarted(false);

@@ -10,7 +10,8 @@ import {
   File,
   Check
 } from "lucide-react";
-import { FloatingDockProps, ModelOption, UploadedFile } from "@/app/types/chat";
+import { FloatingDockProps, UploadedFile, UploadedFileWithUrl, ModelOption } from '@/app/types/chat';
+import { generatePresignedUrl, isUrlExpired } from '@/utils/presignedUrls';
 import { createClientForBrowser } from "@/utils/supabase/client";
 import { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
@@ -254,20 +255,9 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
               throw new Error(`Upload failed: ${uploadError.message}`);
             }
 
-            // Get public URL
-            const { data: urlData } = supabase.storage
-              .from('chat-files')
-              .getPublicUrl(fileName);
-
-            if (!urlData.publicUrl) {
-              toast.error('Error uploading file')
-              throw new Error('Failed to generate public URL');
-            }
-
-            // Create the uploaded file object
+            // Create the uploaded file object without URL
             const newFile: UploadedFile = {
               fileName: file.name,
-              fileUrl: urlData.publicUrl,
               storagePath: fileName,
               metadata: {
                 size: file.size,
@@ -310,20 +300,13 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
     try {
       // Remove from Supabase storage
       setIsRemoving(true)
-      if (uploadedFile.storagePath) {
-        const { error: removeError } = await supabase.storage
-          .from('chat-files')
-          .remove([uploadedFile.storagePath]);
+      const { error: removeError } = await supabase.storage
+        .from('chat-files')
+        .remove([uploadedFile.storagePath]);
 
-        if (removeError) {
-          console.error('Error removing file from storage:', removeError);
-          toast.error('Error removing file')
-        }
-      }
-
-      // Clean up blob URL if it exists
-      if (uploadedFile.fileUrl && uploadedFile.fileUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(uploadedFile.fileUrl);
+      if (removeError) {
+        console.error('Error removing file from storage:', removeError);
+        toast.error('Error removing file')
       }
 
       if (onFileRemove) {
@@ -367,11 +350,9 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
         <div className="mb-3">
           <div title={`${uploadedFile.fileName} (${uploadedFile.metadata.type})`} className="relative bg-slate-800/70 backdrop-blur-sm border border-slate-600/50 rounded-lg p-2 pr-8 flex items-center space-x-2 max-w-xs cursor-default">
             {uploadedFile.metadata?.type?.startsWith('image/') ? (
-              <img 
-                src={uploadedFile.fileUrl} 
-                alt={uploadedFile.fileName}
-                className="w-8 h-8 object-cover rounded"
-              />
+              <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-slate-300">
+                <Image className="w-4 h-4" />
+              </div>
             ) : (
               <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-slate-300">
                 {getFileIcon(uploadedFile.metadata.type)}

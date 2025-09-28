@@ -46,18 +46,21 @@ function toModelMessages(messages: any[]): ModelMessage[] {
     }
 
     // Add file if present
-    if (msg.file && msg.file.fileUrl) {
+    if (msg.file && msg.file.storagePath) {
       const mime = msg.file.metadata?.type || "";
+
+      // Use presigned URL if available, fallback to storagePath for error handling
+      const fileUrl = msg.file.fileUrl || msg.file.storagePath;
 
       if (mime.startsWith("image/")) {
         parts.push({
           type: "image",
-          image: msg.file.fileUrl, // Direct URL string, not object
+          image: fileUrl, // Direct URL string, not object
         });
       } else if (mime === "application/pdf") {
         parts.push({
           type: "file",
-          data: msg.file.fileUrl,
+          data: fileUrl,
           mediaType: mime,
         });
       } else if (
@@ -68,7 +71,7 @@ function toModelMessages(messages: any[]): ModelMessage[] {
       ) {
         parts.push({
           type: "file",
-          data: msg.file.fileUrl,
+          data: fileUrl,
           mediaType: mime,
         });
       } else {

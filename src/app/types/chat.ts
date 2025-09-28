@@ -1,14 +1,18 @@
 export interface UploadedFile {
   fileName: string;
-  fileUrl: string;
-  storagePath?: string;
+  storagePath: string;
   metadata: {
     size: number;
     type: string;
     uploadedAt: string;
-    userId?: string;
+    userId: string;
     originalName: string;
   };
+}
+
+export interface UploadedFileWithUrl extends UploadedFile {
+  fileUrl: string;
+  urlExpiresAt?: string;
 }
 
 export interface ModelOption {
@@ -24,7 +28,7 @@ export interface FloatingDockProps {
   isLoading?: boolean;
   selectedModel?: ModelOption;
   onModelChange?: (model: ModelOption) => void;
-  uploadedFile?: UploadedFile;
+  uploadedFile?: UploadedFile | UploadedFileWithUrl;
   onFileUpload?: (files: UploadedFile) => void;
   onFileRemove?: () => void;
 }

@@ -1,13 +1,16 @@
 'use client';
 
 import {
-  User, Bot, FileText, ExternalLink, Image as ImageIcon, Paperclip
+  User, Bot, FileText, ExternalLink, Image as ImageIcon, Paperclip, Loader2
 } from 'lucide-react';
 import { Message } from '@/app/types/chat';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { generatePresignedUrl } from '@/utils/presignedUrls';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
 interface ChatBubbleProps {
   message: Message;
@@ -26,25 +29,76 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   isStreaming = false,
   isActiveStream = false,
 }) => {
+  const [fileUrls, setFileUrls] = useState<{ [key: string]: string }>({});
+  const [loadingFiles, setLoadingFiles] = useState<{ [key: string]: boolean }>({});
+
+  const handleFileClick = async (storagePath: string, fileName: string) => {
+    // If we already have a URL, use it
+    if (fileUrls[storagePath]) {
+      window.open(fileUrls[storagePath], '_blank');
+      return;
+    }
+
+    // Show loading state
+    setLoadingFiles(prev => ({ ...prev, [storagePath]: true }));
+
+    try {
+      const presignedData = await generatePresignedUrl(storagePath); // Use default 1 hour expiry
+      if (presignedData) {
+        setFileUrls(prev => ({ ...prev, [storagePath]: presignedData.signedUrl }));
+        window.open(presignedData.signedUrl, '_blank');
+      } else {
+        toast.error('Unable to access file');
+      }
+    } catch (error) {
+      console.error('Error opening file:', error);
+      toast.error('Error opening file');
+    } finally {
+      setLoadingFiles(prev => ({ ...prev, [storagePath]: false }));
+    }
+  };
   const renderFileContent = (fileData: any) => {
     if (!fileData) return null;
 
-  function prettySize( bytes : number) {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(2)} KB`;
-  return `${bytes} B`;
-}
+    function prettySize( bytes : number) {
+      if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+      if (bytes >= 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+      return `${bytes} B`;
+    }
+
+    const isLoading = loadingFiles[fileData.storagePath];
+    const cachedUrl = fileUrls[fileData.storagePath];
+
     return (
       <div className="mt-3 pt-2">
         {fileData.metadata?.type?.startsWith('image/') && (
           <div className="space-y-2">
-            <img
-              src={fileData.fileUrl}
-              alt={fileData.fileName}
-              className="max-w-full h-auto rounded-lg border border-gray-300 shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
-              style={{ maxHeight: '300px' }}
-              onClick={() => window.open(fileData?.fileUrl, '_blank')}
-            />
+            {cachedUrl ? (
+              <img
+                src={cachedUrl}
+                alt={fileData.fileName}
+                className="max-w-full h-auto rounded-lg border border-gray-300 shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
+                style={{ maxHeight: '300px' }}
+                onClick={() => window.open(cachedUrl, '_blank')}
+              />
+            ) : (
+              <div 
+                className="max-w-full h-30 w-40 bg-gray-700 rounded-lg border border-gray-300 shadow-sm cursor-pointer hover:bg-gray-600 transition-colors flex items-center justify-center"
+                onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
+              >
+                {isLoading ? (
+                  <div className="text-center">
+                    <Loader2 className="w-8 h-8 text-gray-400 animate-spin mx-auto mb-2" />
+                    <span className="text-sm text-gray-400">Loading image...</span>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <ImageIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <span className="text-sm text-gray-400">Click to view image</span>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="flex items-center space-x-2 text-xs opacity-75">
               <ImageIcon className="w-3 h-3" />
               <span>{fileData.fileName}</span>
@@ -56,10 +110,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           <div className="space-y-2 max-w-[300px]">
             <div
               className="flex items-center space-x-3 p-3 bg-red-50 border border-red-200 rounded-lg cursor-pointer hover:bg-red-100 transition-colors w-full"
-              onClick={() => window.open(fileData?.fileUrl, '_blank')}
+              onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
             >
               <div className="flex-shrink-0">
-                <FileText className="w-8 h-8 text-red-600" />
+                {isLoading ? (
+                  <Loader2 className="w-8 h-8 text-red-600 animate-spin" />
+                ) : (
+                  <FileText className="w-8 h-8 text-red-600" />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-red-900 truncate">
@@ -78,10 +136,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           <div className="space-y-2 max-w-[300px]">
             <div
               className="flex items-center space-x-3 p-3 bg-green-50 border border-green-200 rounded-lg cursor-pointer hover:bg-green-100 transition-colors"
-              onClick={() => window.open(fileData?.fileUrl, '_blank')}
+              onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
             >
               <div className="flex-shrink-0">
-                <FileText className="w-8 h-8 text-green-600" />
+                {isLoading ? (
+                  <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
+                ) : (
+                  <FileText className="w-8 h-8 text-green-600" />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-green-900 truncate">
@@ -103,10 +165,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             <div className="space-y-2 max-w-[300px]">
               <div
                 className="flex items-center space-x-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
-                onClick={() => window.open(fileData?.fileUrl, '_blank')}
+                onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
               >
                 <div className="flex-shrink-0">
-                  <Paperclip className="w-8 h-8 text-gray-600" />
+                  {isLoading ? (
+                    <Loader2 className="w-8 h-8 text-gray-600 animate-spin" />
+                  ) : (
+                    <Paperclip className="w-8 h-8 text-gray-600" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">
