@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClientForBrowser } from '@/utils/supabase/client';
 import { Message } from '@/app/types/chat';
 import { toast } from 'sonner';
 
@@ -14,29 +13,31 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
-  const supabase = createClientForBrowser();
   const router = useRouter();
 
   const fetchMessages = useCallback(async (pageNum: number = 0, reset: boolean = false) => {
     if (!sessionId) return;
     setLoading(true);
     try {
-      const from = pageNum * pageSize;
-      const to = from + pageSize - 1;
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('session_id', sessionId)
-        .order('created_at', { ascending: false })
-        .range(from, to);
-      if (error) throw error;
-      const reversedMessages = (data || []).reverse();
-      if (reset || pageNum === 0) {
-        setMessages(reversedMessages);
-      } else {
-        setMessages(prev => [...reversedMessages, ...prev]);
+      const params = new URLSearchParams({
+        sessionId,
+        page: pageNum.toString(),
+        pageSize: pageSize.toString(),
+      });
+
+      const response = await fetch(`/api/messages?${params}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch messages');
       }
-      setHasMore((data || []).length === pageSize);
+
+      const { messages: fetchedMessages, hasMore: moreAvailable } = await response.json();
+      
+      if (reset || pageNum === 0) {
+        setMessages(fetchedMessages);
+      } else {
+        setMessages(prev => [...fetchedMessages, ...prev]);
+      }
+      setHasMore(moreAvailable);
       setPage(pageNum);
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -45,7 +46,7 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
     } finally {
       setLoading(false);
     }
-  }, [sessionId, pageSize, supabase, router]);
+  }, [sessionId, pageSize, router]);
 
   const loadMoreMessages = useCallback(() => {
     if (!loading && hasMore) {
@@ -56,15 +57,22 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
   const addMessage = useCallback(async (message: Omit<Message, 'id' | 'created_at'>) => {
     if (!sessionId) return;
     try {
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           ...message,
           session_id: sessionId
-        })
-        .select()
-        .single();
-      if (error) throw error;
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add message');
+      }
+
+      const data = await response.json();
       setMessages(prev => [...prev, data]);
       return data;
     } catch (error) {
@@ -72,7 +80,7 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
       toast.error('Message adding failed');
       return null;
     }
-  }, [sessionId, supabase]);
+  }, [sessionId]);
 
   const updateMessage = useCallback(async (messageId: string, updates: Partial<Message>) => {
     try {
@@ -81,24 +89,27 @@ export const useChatMessages = ({ sessionId, pageSize = 20 }: UseMessagesProps) 
         prev.map(m => m.id === messageId ? { ...m, ...updates } : m)
       );
 
-      // Then update database
-      const { error } = await supabase
-        .from('messages')
-        .update(updates)
-        .eq('id', messageId);
+      // Then update database via API
+      const response = await fetch(`/api/messages/${messageId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      });
         
-      if (error) {
-        // Revert local state if database update fails
+      if (!response.ok) {
+        // Revert local state if API call fails
         setMessages(prev => 
           prev.map(m => m.id === messageId ? { ...m, ...Object.fromEntries(Object.keys(updates).map(key => [key, undefined])) } : m)
         );
-        throw error;
+        throw new Error('Failed to update message');
       }
     } catch (error) {
       console.error('Error updating message:', error);
       toast.error('Message updation failed');
     }
-  }, [supabase]);
+  }, []);
 
   // Clear ALL message state before fetching for new session 
   useEffect(() => {

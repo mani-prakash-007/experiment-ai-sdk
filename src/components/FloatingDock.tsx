@@ -12,8 +12,7 @@ import {
 } from "lucide-react";
 import { FloatingDockProps, UploadedFile, UploadedFileWithUrl, ModelOption } from '@/app/types/chat';
 import { generatePresignedUrl, isUrlExpired } from '@/utils/presignedUrls';
-import { createClientForBrowser } from "@/utils/supabase/client";
-import { User } from "@supabase/supabase-js";
+import { useAuth } from '@/app/hooks/useAuth';
 import { toast } from "sonner";
 
 const MODEL_OPTIONS: { [key: string]: ModelOption[] } = {
@@ -58,29 +57,6 @@ const getFileIcon = (mimeType: string) => {
 };
 
 // Updated utility functions
-const generateUniqueFileName = (originalName: string, userId: string, mimeType: string) => {
-  const timestamp = Date.now();
-  const randomString = Math.random().toString(36).substring(2, 15);
-  const extension = originalName.split('.').pop() || getDefaultExtension(mimeType);
-  const fileType = getFileTypeFromMime(mimeType);
-  return `${userId}/${fileType}/${timestamp}-${randomString}.${extension}`;
-};
-
-const getDefaultExtension = (mimeType: string): string => {
-  const extensionMap: { [key: string]: string } = {
-    'application/pdf': 'pdf',
-    'text/plain': 'txt',
-    'text/markdown': 'md',
-    'text/x-markdown': 'md',
-    'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'image/gif': 'gif',
-    'image/webp': 'webp',
-    'image/svg+xml': 'svg'
-  };
-  return extensionMap[mimeType] || 'txt';
-};
-
 // Updated validation function with your specific allowed types
 const validateFile = (file: File) => {
   const maxSize = 5 * 1024 * 1024; // 5MB
@@ -136,36 +112,13 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   const [showUploadDropdown, setShowUploadDropdown] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const uploadDropdownRef = useRef<HTMLDivElement>(null);
   
-  const supabase = createClientForBrowser();
-
-  // Get user on component mount and listen for auth changes
-  useEffect(() => {
-    const getUser = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error) {
-        console.error('Error getting user:', error);
-        return;
-      }
-      setUser(user);
-    };
-
-    getUser();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setUser(session?.user ?? null);
-      }
-    );
-
-    return () => subscription.unsubscribe();
-  }, [supabase.auth]);
+  const { user } = useAuth();
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -240,36 +193,25 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
             setIsUploading(true);
             setUploadError(null);
 
-            // Generate unique filename
-            const fileName = generateUniqueFileName(file.name, user.id, file.type);
+            // Create FormData for file upload
+            const formData = new FormData();
+            formData.append('file', file);
             
-            // Upload to Supabase storage
-            const { data: uploadData, error: uploadError } = await supabase.storage
-              .from('chat-files')
-              .upload(fileName, file, {
-                cacheControl: '3600',
-                upsert: false
-              });
+            // Upload via API
+            const response = await fetch('/api/files/upload', {
+              method: 'POST',
+              body: formData,
+            });
 
-            if (uploadError) {
-              throw new Error(`Upload failed: ${uploadError.message}`);
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(`Upload failed: ${errorData.error}`);
             }
 
-            // Create the uploaded file object without URL
-            const newFile: UploadedFile = {
-              fileName: file.name,
-              storagePath: fileName,
-              metadata: {
-                size: file.size,
-                type: file.type,
-                uploadedAt: new Date().toISOString(),
-                userId: user.id,
-                originalName: file.name
-              }
-            };
+            const uploadedFile = await response.json();
 
             if (onFileUpload) {
-              onFileUpload(newFile);
+              onFileUpload(uploadedFile);
             }
             toast.success('File uploaded')
 
@@ -298,21 +240,24 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
     if (!uploadedFile || !user) return;
 
     try {
-      // Remove from Supabase storage
+      // Remove from storage via API
       setIsRemoving(true)
-      const { error: removeError } = await supabase.storage
-        .from('chat-files')
-        .remove([uploadedFile.storagePath]);
+      const encodedStoragePath = encodeURIComponent(uploadedFile.storagePath);
+      const response = await fetch(`/api/files/${encodedStoragePath}`, {
+        method: 'DELETE',
+      });
 
-      if (removeError) {
-        console.error('Error removing file from storage:', removeError);
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error removing file from storage:', errorData.error);
         toast.error('Error removing file')
+      } else {
+        toast.success('File Removed')
       }
 
       if (onFileRemove) {
         onFileRemove();
       }
-      toast.success('File Removed')
     } catch (error) {
       console.error('Error during file removal:', error);
       toast.error('Error during file removal')

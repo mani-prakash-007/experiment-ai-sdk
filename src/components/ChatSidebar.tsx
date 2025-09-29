@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { MessageSquare, Trash2, X, Search, XCircle, User as UserIcon, LogOut, Menu, Plus } from 'lucide-react';
-import { signOut } from '@/utils/actions';
 import { useChatSessions } from '@/app/hooks/useChatSessions';
 import { useAuth } from '@/app/hooks/useAuth';
 import { toast } from 'sonner';
@@ -301,7 +300,25 @@ export const ChatSidebar: React.FC = () => {
                 <div className="absolute bottom-full left-1 mb-2 w-48 bg-gray-700 border border-gray-600 rounded-md shadow-lg overflow-hidden z-50">
                   <button
                     onClick={async () => {
-                      await signOut();
+                      try {
+                        const response = await fetch('/api/auth/signout', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                          },
+                        });
+
+                        if (response.ok) {
+                          // Redirect to signin page after successful signout
+                          router.push('/auth/signin');
+                        } else {
+                          const data = await response.json();
+                          toast.error('Sign out failed: ' + (data.error || 'Unknown error'));
+                        }
+                      } catch (error) {
+                        console.error('Sign out error:', error);
+                        toast.error('Sign out failed');
+                      }
                       setOpen(false);
                     }}
                     className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-600 text-white text-sm"

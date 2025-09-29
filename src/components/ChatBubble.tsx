@@ -19,6 +19,7 @@ interface ChatBubbleProps {
   isError?: boolean;
   isStreaming?: boolean;
   isActiveStream?: boolean;
+  streamingContent?: string; // Add streaming content prop
 }
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({
@@ -28,6 +29,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   isError = false,
   isStreaming = false,
   isActiveStream = false,
+  streamingContent = '',
 }) => {
   const [fileUrls, setFileUrls] = useState<{ [key: string]: string }>({});
   const [loadingFiles, setLoadingFiles] = useState<{ [key: string]: boolean }>({});
@@ -294,7 +296,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   // ENHANCED MAIN CONTENT RENDER LOGIC:
   const renderMessageContent = () => {
     const isAssistant = message.role === 'assistant';
-    const hasContent = typeof message.content === 'string' && message.content.trim().length > 0;
+    // Use streaming content if actively streaming, otherwise use message content
+    const displayContent = (isActiveStream && streamingContent) ? streamingContent : message.content;
+    const hasContent = typeof displayContent === 'string' && displayContent.trim().length > 0;
     const hasDocument = !!(message.document_id);
 
     // 1. If actively streaming this bubble, show loading or stream content
@@ -304,10 +308,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           <div>
             {isAssistant ? (
               <ReactMarkdown components={markdownComponents}>
-                {message.content}
+                {displayContent}
               </ReactMarkdown>
             ) : (
-              message.content
+              displayContent
             )}
             {!hasDocument && (
               <div className="mt-2 text-xs text-blue-300 opacity-75 animate-pulse">
@@ -331,7 +335,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       if (hasContent) {
         return (
           <ReactMarkdown components={markdownComponents}>
-            {message.content}
+            {displayContent}
           </ReactMarkdown>
         );
       }
@@ -353,7 +357,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     }
 
     // 3. User messages
-    if (hasContent) return message.content;
+    if (hasContent) return displayContent;
 
     // 4. Fallback for empty user message
     return (

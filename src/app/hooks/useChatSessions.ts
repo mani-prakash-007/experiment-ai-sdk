@@ -1,25 +1,22 @@
 import { useState, useEffect } from 'react';
-import { createClientForBrowser } from '@/utils/supabase/client';
 import { ChatSession } from '@/app/types/chat';
 import { toast } from 'sonner';
 
 export const useChatSessions = (userId: string | undefined) => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
-  const supabase = createClientForBrowser();
 
   const fetchSessions = async () => {
     if (!userId) return;
     
     try {
-      const { data, error } = await supabase
-        .from('chat_sessions')
-        .select('*')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false });
+      const response = await fetch('/api/sessions');
+      if (!response.ok) {
+        throw new Error('Failed to fetch sessions');
+      }
 
-      if (error) throw error;
-      setSessions(data || []);
+      const { sessions: fetchedSessions } = await response.json();
+      setSessions(fetchedSessions || []);
     } catch (error) {
       console.error('Error fetching sessions:', error);
       toast.error('Session fetch failed')
@@ -36,17 +33,21 @@ export const useChatSessions = (userId: string | undefined) => {
     if (!userId) return null;
 
     try {
-      const { data, error } = await supabase
-        .from('chat_sessions')
-        .insert({
-          user_id: userId,
+      const response = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           title: 'Untitled Session'
-        })
-        .select()
-        .single();
+        }),
+      });
 
-      if (error) throw error;
-      
+      if (!response.ok) {
+        throw new Error('Failed to create session');
+      }
+
+      const data = await response.json();
       setSessions(prev => [data, ...prev]);
       return data.id;
     } catch (error) {
@@ -58,13 +59,14 @@ export const useChatSessions = (userId: string | undefined) => {
 
   const deleteSession = async (sessionId: string) => {
     try {
-      const { error } = await supabase
-        .from('chat_sessions')
-        .delete()
-        .eq('id', sessionId);
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: 'DELETE',
+      });
 
-      if (error) throw error;
-      
+      if (!response.ok) {
+        throw new Error('Failed to delete session');
+      }
+
       setSessions(prev => prev.filter(s => s.id !== sessionId));
     } catch (error) {
       console.error('Error deleting session:', error);
@@ -74,18 +76,21 @@ export const useChatSessions = (userId: string | undefined) => {
 
   const updateSessionTitle = async (sessionId: string, title: string) => {
     try {
-      const { error } = await supabase
-        .from('chat_sessions')
-        .update({ 
-          title,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', sessionId);
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ title }),
+      });
 
-      if (error) throw error;
-      
+      if (!response.ok) {
+        throw new Error('Failed to update session title');
+      }
+
+      const updatedSession = await response.json();
       setSessions(prev => 
-        prev.map(s => s.id === sessionId ? { ...s, title, updated_at: new Date().toISOString() } : s)
+        prev.map(s => s.id === sessionId ? updatedSession : s)
       );
     } catch (error) {
       console.error('Error updating session title:', error);

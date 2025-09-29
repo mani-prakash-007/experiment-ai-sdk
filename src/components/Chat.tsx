@@ -70,6 +70,9 @@ export default function Chat() {
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | UploadedFileWithUrl>();
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [streamingContent, setStreamingContent] = useState<string>('');
+  const streamingContentRef = useRef<string>('');
+  const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [streamingStarted, setStreamingStarted] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
   const [streamingDocumentData, setStreamingDocumentData] = useState<{
@@ -98,6 +101,20 @@ export default function Chat() {
     schema: CanvasDocumentSchema,
   });
 
+  const updateStreamingContentThrottled = useCallback((content: string) => {
+    streamingContentRef.current = content;
+    
+    // Clear existing timeout
+    if (streamingTimeoutRef.current) {
+      clearTimeout(streamingTimeoutRef.current);
+    }
+    
+    // Throttle state updates to avoid excessive re-renders
+    streamingTimeoutRef.current = setTimeout(() => {
+      setStreamingContent(streamingContentRef.current);
+    }, 100); // Update UI every 100ms
+  }, []);
+
   const clearSessionState = () => {
     setInput('');
     setUploadedFile(undefined);
@@ -107,6 +124,12 @@ export default function Chat() {
     setStreamingStarted(false);
     setStreamingDocumentData(null);
     setStreamingCompleted(false);
+    setStreamingContent('');
+    streamingContentRef.current = '';
+    if (streamingTimeoutRef.current) {
+      clearTimeout(streamingTimeoutRef.current);
+      streamingTimeoutRef.current = null;
+    }
     aiSubmittedSession.current = null;
     setShouldAutoScroll(false);
   };
@@ -312,21 +335,15 @@ export default function Chat() {
         return;
       }
       
-      // During streaming: accumulate document data and update message content (throttled)
+      // During streaming: only accumulate content locally (no API calls)
       if (streamingMessageId && isLoading && (object?.general || object?.document || object?.title)) {
         const currentContent = object?.general || '';
         const currentDocumentContent = object?.document || '';
         const currentTitle = object?.title || '';
         
-        // Update message content (throttled to prevent excessive DB calls)
+        // Update local streaming content for immediate UI feedback (throttled)
         if (currentContent) {
-          try {
-            await updateMessage(streamingMessageId, {
-              content: currentContent,
-            });
-          } catch (error) {
-            console.error('Error updating message during streaming:', error);
-          }
+          updateStreamingContentThrottled(currentContent);
         }
         
         // Accumulate document data (don't save to DB yet)
@@ -342,12 +359,20 @@ export default function Chat() {
         return;
       }
       
-      // End of stream: create document and link to message (only once)
+      // End of stream: update message content once and create document if needed
       if (!isLoading && streamingMessageId && streamingStarted && !streamingCompleted) {
         setStreamingCompleted(true);
         
         try {
-          // Only create document if we have meaningful content
+          // Prepare the final message updates
+          const finalContent = streamingContentRef.current || object?.general || '';
+          const messageUpdates: any = {};
+          
+          if (finalContent) {
+            messageUpdates.content = finalContent;
+          }
+
+          // Create document first if we have meaningful content
           const hasContent = streamingDocumentData?.content?.trim();
           const hasTitle = streamingDocumentData?.title?.trim();
           const shouldCreateDocument = hasContent || hasTitle;
@@ -361,15 +386,18 @@ export default function Chat() {
             });
             
             if (newDocument) {
-              // Update the message to link to the document
-              await updateMessage(streamingMessageId, {
-                document_id: newDocument.id,
-              });
+              // Add document ID to the message update
+              messageUpdates.document_id = newDocument.id;
               
               // Open the editor with the new document
               setActiveDocumentId(newDocument.id);
               setIsEditorOpen(true);
             }
+          }
+
+          // Single API call to update message with both content and document_id
+          if (Object.keys(messageUpdates).length > 0) {
+            await updateMessage(streamingMessageId, messageUpdates);
           }
         } catch (error) {
           console.error('Error finalizing document:', error);
@@ -379,6 +407,12 @@ export default function Chat() {
           setStreamingStarted(false);
           setStreamingDocumentData(null);
           setStreamingCompleted(false);
+          setStreamingContent('');
+          streamingContentRef.current = '';
+          if (streamingTimeoutRef.current) {
+            clearTimeout(streamingTimeoutRef.current);
+            streamingTimeoutRef.current = null;
+          }
           aiSubmittedSession.current = null;
         }
       }
@@ -461,6 +495,7 @@ export default function Chat() {
                         onDocumentClick={openDocument}
                         isStreaming={!!isLoading}
                         isActiveStream={streamingMessageId === message.id}
+                        streamingContent={streamingMessageId === message.id ? streamingContent : ''}
                       />
                     </div>
                   ))}
