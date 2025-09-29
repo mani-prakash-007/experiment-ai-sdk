@@ -23,7 +23,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ createSession, ref
   };
 
   return (
-    <div className="w-full flex items-center justify-center h-full text-gray-400 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="w-full flex items-center justify-center h-full text-gray-400 ">
       <div className="text-center max-w-md mx-auto p-8">
         <MessageSquare className="w-20 h-20 mx-auto mb-6 opacity-50" />
         <h2 className="text-2xl font-bold text-white mb-4">Welcome to AI Canvas Chat</h2>

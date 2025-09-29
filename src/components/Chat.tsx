@@ -447,7 +447,7 @@ export default function Chat() {
 
   if (authLoading) {
     return (
-      <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="flex items-center justify-center h-full w-full">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
           <p className="text-gray-400">Loading...</p>
@@ -457,7 +457,7 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex h-full w-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
+    <div className="flex h-full w-full overflow-hidden">
       {/* 2 COLUMN FLEX */}
       <div className={`flex flex-row h-full w-full transition-all duration-500 ease-in-out`}>
         <div className={`flex flex-col flex-1 min-w-0 h-full`}>

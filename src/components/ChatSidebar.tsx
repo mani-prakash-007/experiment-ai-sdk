@@ -6,6 +6,7 @@ import { useChatSessions } from '@/app/hooks/useChatSessions';
 import { useAuth } from '@/app/hooks/useAuth';
 import { toast } from 'sonner';
 import { useRouter, useParams } from 'next/navigation';
+import { signOut } from '@/utils/actions';
 
 export const ChatSidebar: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -114,7 +115,7 @@ export const ChatSidebar: React.FC = () => {
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 768) {
-        setSidebarOpen(true);
+        setSidebarOpen(false);
       } else {
         setSidebarOpen(false);
       }
@@ -269,7 +270,7 @@ export const ChatSidebar: React.FC = () => {
                         if (confirm('Are you sure you want to delete this session?')) 
                           handleSessionDelete(session.id);
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-all duration-200 transform hover:scale-110"
+                      className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-all duration-200 transform hover:scale-110 cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -299,29 +300,8 @@ export const ChatSidebar: React.FC = () => {
               {open && (
                 <div className="absolute bottom-full left-1 mb-2 w-48 bg-gray-700 border border-gray-600 rounded-md shadow-lg overflow-hidden z-50">
                   <button
-                    onClick={async () => {
-                      try {
-                        const response = await fetch('/api/auth/signout', {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                          },
-                        });
-
-                        if (response.ok) {
-                          // Redirect to signin page after successful signout
-                          router.push('/auth/signin');
-                        } else {
-                          const data = await response.json();
-                          toast.error('Sign out failed: ' + (data.error || 'Unknown error'));
-                        }
-                      } catch (error) {
-                        console.error('Sign out error:', error);
-                        toast.error('Sign out failed');
-                      }
-                      setOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-600 text-white text-sm"
+                    onClick={signOut}
+                    className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-600 text-white text-sm cursor-pointer"
                   >
                     <LogOut className="w-4 h-4" /> Sign Out
                   </button>
