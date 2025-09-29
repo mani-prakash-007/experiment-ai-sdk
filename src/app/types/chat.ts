@@ -15,6 +15,30 @@ export interface UploadedFileWithUrl extends UploadedFile {
   urlExpiresAt?: string;
 }
 
+export interface FileWithMetadata {
+  id: string;
+  name: string;
+  storagePath: string;
+  size: number;
+  type: string;
+  uploadedAt: string;
+  userId: string;
+  originalName: string;
+  category: 'image' | 'document' | 'other';
+}
+
+export interface FilesResponse {
+  files: FileWithMetadata[];
+  pagination: {
+    page: number;
+    limit: number;
+    totalFiles: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  };
+}
+
 export interface ModelOption {
   id: string;
   name: string;
