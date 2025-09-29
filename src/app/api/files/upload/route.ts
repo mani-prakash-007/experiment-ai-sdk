@@ -28,7 +28,6 @@ export async function POST(request: NextRequest) {
     // Generate unique filename
     const timestamp = Date.now();
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const fileExtension = sanitizedName.split('.').pop();
     const fileName = `${user.id}/${timestamp}_${sanitizedName}`;
 
     // Convert file to buffer for upload
