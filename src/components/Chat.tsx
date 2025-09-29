@@ -56,7 +56,7 @@ export default function Chat() {
   const activeSessionId = params.sessionId as string | null;
 
   const { user, loading: authLoading } = useAuth();
-  const { sessions, createSession, updateSessionTitle, refreshSessions } = useChatSessions(user?.id);
+  const { sessions, updateSessionTitle } = useChatSessions(user?.id);
   const { createDocument, saveDocument } = useDocuments({ userId: user?.id });
 
   const [input, setInput] = useState('');
@@ -544,7 +544,7 @@ export default function Chat() {
               </div>
             </div>
           ) : (
-            <WelcomeScreen createSession={createSession} refreshSessions={refreshSessions}/>
+            <WelcomeScreen/>
           )}
         </div>
         {/* CANVAS EDITOR AS SIDE COLUMN */}

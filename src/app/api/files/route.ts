@@ -54,8 +54,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Filter out folders and placeholder files
+    const filesOnly = fileList?.filter(item => {
+      // Filter out folder placeholders and system files
+      const isPlaceholderFile = item.name === '.emptyFolderPlaceholder' || 
+                               item.name.startsWith('.') ||
+                               item.name.endsWith('/');
+      
+      const hasValidMetadata = item.metadata && Object.keys(item.metadata).length > 0;
+      const hasId = item.id !== null && item.id !== undefined;
+      
+      return !isPlaceholderFile && hasValidMetadata && hasId;
+    }) || [];
+
     // Transform files and add metadata
-    let filesWithMetadata: FileWithMetadata[] = fileList?.map((file) => {
+    let filesWithMetadata: FileWithMetadata[] = filesOnly.map((file) => {
       // Extract metadata from filename
       const storagePath = `${user.id}/${file.name}`;
       const parts = file.name.split('_');
@@ -77,7 +90,7 @@ export async function GET(request: NextRequest) {
         originalName: originalName || file.name,
         category
       };
-    }) || [];
+    });
 
     // Filter by category if specified
     if (category && category !== 'all') {

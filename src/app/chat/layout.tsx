@@ -11,7 +11,7 @@ export default function RootLayout({
       <div className="h-screen w-screen overflow-hidden fixed">
         <div className="flex h-full w-full">
           <ChatSidebar />
-          <main className="flex-1 overflow-auto min-w-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+          <main className="flex-1 overflow-auto min-w-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 transition-all duration-300">
             {children}
           </main>
         </div>
