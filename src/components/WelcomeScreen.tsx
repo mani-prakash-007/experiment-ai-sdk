@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { MessageSquare, Plus } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 
 
 export const WelcomeScreen: React.FC = () => {
