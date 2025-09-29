@@ -72,20 +72,109 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
   const getVersionMetaList = useCallback(async (documentId: string): Promise<VersionMeta[]> => {
     setLoading(true);
     setError(null);
-    const { data, error: err } = await supabase
-      .from('document_versions')
-      .select('version_number,created_at,created_by,change_summary')
-      .eq('document_id', documentId)
-      .order('version_number', { ascending: false });
+    
+    // Query both tables in parallel
+    const [currentDocResult, historicalVersionsResult] = await Promise.all([
+      supabase
+        .from('documents')
+        .select('version_number,updated_at,user_id')
+        .eq('id', documentId)
+        .single(),
+      supabase
+        .from('document_versions')
+        .select('version_number,created_at,created_by,change_summary')
+        .eq('document_id', documentId)
+        .order('version_number', { ascending: false })
+    ]);
+    
+    const { data: currentDoc, error: currentDocError } = currentDocResult;
+    const { data: historicalVersions, error: historicalError } = historicalVersionsResult;
+    
     setLoading(false);
-    if (err) setError(err.message);
-    return (data as VersionMeta[]) || [];
+    
+    if (currentDocError && historicalError) {
+      setError(currentDocError.message || historicalError.message);
+      return [];
+    }
+    
+    const versionsList: VersionMeta[] = [];
+    
+    // Add current version (live document)
+    if (currentDoc) {
+      versionsList.push({
+        version_number: currentDoc.version_number,
+        created_at: currentDoc.updated_at,
+        created_by: currentDoc.user_id,
+        change_summary: 'Current version'
+      });
+    }
+    
+    // Add all historical versions
+    if (historicalVersions && historicalVersions.length > 0) {
+      versionsList.push(...(historicalVersions as VersionMeta[]));
+    }
+    
+    // Sort by version number descending (current version first, then historical)
+    return versionsList.sort((a, b) => b.version_number - a.version_number);
+  }, []);
+
+  const getAllDocumentVersions = useCallback(async (documentId: string): Promise<DocumentVersion[]> => {
+    setLoading(true);
+    setError(null);
+    
+    // Query both tables in parallel
+    const [currentDocResult, historicalVersionsResult] = await Promise.all([
+      supabase
+        .from('documents')
+        .select('*')
+        .eq('id', documentId)
+        .single(),
+      supabase
+        .from('document_versions')
+        .select('*')
+        .eq('document_id', documentId)
+        .order('version_number', { ascending: false })
+    ]);
+    
+    const { data: currentDoc, error: currentDocError } = currentDocResult;
+    const { data: historicalVersions, error: historicalError } = historicalVersionsResult;
+    
+    setLoading(false);
+    
+    if (currentDocError && historicalError) {
+      setError(currentDocError.message || historicalError.message);
+      return [];
+    }
+    
+    const allVersions: DocumentVersion[] = [];
+    
+    // Add current version (live document) converted to DocumentVersion format
+    if (currentDoc) {
+      allVersions.push({
+        id: currentDoc.id,
+        document_id: currentDoc.id,
+        version_number: currentDoc.version_number,
+        title: currentDoc.title,
+        content: currentDoc.content,
+        extra: currentDoc.extra,
+        change_summary: 'Current version',
+        created_at: currentDoc.updated_at,
+        created_by: currentDoc.user_id
+      });
+    }
+    
+    // Add all historical versions
+    if (historicalVersions && historicalVersions.length > 0) {
+      allVersions.push(...(historicalVersions as DocumentVersion[]));
+    }
+    
+    // Sort by version number descending (current version first, then historical)
+    return allVersions.sort((a, b) => b.version_number - a.version_number);
   }, []);
 
   const saveDocument = useCallback(async (
     documentId: string,
     data: Partial<DocumentData>,
-    changeSummary?: string
   ): Promise<Document | null> => {
     setLoading(true);
     setError(null);
@@ -122,6 +211,7 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
     getDocument,
     getDocumentVersion,
     getVersionMetaList,
+    getAllDocumentVersions,
     saveDocument,
     createDocument
   };

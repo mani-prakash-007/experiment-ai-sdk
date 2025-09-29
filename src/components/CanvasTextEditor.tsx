@@ -493,7 +493,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStre
           }
         };
 
-        await onSave(updatedDoc);
+        onSave(updatedDoc);
         setEditable(false);
         setPristine(updatedDoc);
         
