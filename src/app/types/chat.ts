@@ -55,6 +55,7 @@ export interface FloatingDockProps {
   uploadedFile?: UploadedFile | UploadedFileWithUrl;
   onFileUpload?: (files: UploadedFile) => void;
   onFileRemove?: () => void;
+  messageFiles: UploadedFile[];
 }
 
 export interface Message {

@@ -7,12 +7,13 @@ import { useAuth } from '@/app/hooks/useAuth';
 import { toast } from 'sonner';
 import { useRouter, useParams } from 'next/navigation';
 import { signOut } from '@/utils/actions';
-import Link from 'next/link';
 
 export const ChatSidebar: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedDropdownOpen, setExpandedDropdownOpen] = useState(false);
+  const [newSessionLoading, setNewSessionLoading] = useState(false);
+  const [galleryLoading, setGalleryLoading] = useState(false);
   const expandedDropdownRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -30,11 +31,23 @@ export const ChatSidebar: React.FC = () => {
   } = useChatSessions(user?.id);
 
   const handleNewSession = async () => {
-    const sessionId = await createSession();
-    if (sessionId) {
-      router.push(`/chat/${sessionId}`);
-      toast.success('New session created');
+    setNewSessionLoading(true);
+    try {
+      const sessionId = await createSession();
+      if (sessionId) {
+        router.push(`/chat/${sessionId}`);
+        toast.success('New session created');
+      }
+    } finally {
+      setNewSessionLoading(false);
     }
+  };
+
+  const handleGalleryClick = () => {
+    setGalleryLoading(true);
+    router.push('/chat/gallery');
+    // Reset loading state after a short delay to account for navigation
+    setTimeout(() => setGalleryLoading(false), 1000);
   };
 
   const handleSessionSelect = (sessionId: string) => {
@@ -164,10 +177,17 @@ export const ChatSidebar: React.FC = () => {
           {/* New Session - Always Visible */}
           <button
             onClick={handleNewSession}
-            className="relative group p-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-blue-500/25 cursor-pointer"
+            disabled={newSessionLoading}
+            className={`relative group p-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-blue-500/25 ${
+              newSessionLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            }`}
             title="New Session"
           >
-            <Plus className="w-5 h-5" />
+            {newSessionLoading ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            ) : (
+              <Plus className="w-5 h-5" />
+            )}
             <span className={`absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-gray-800/90 backdrop-blur-sm text-white text-xs rounded-lg px-3 py-1.5 transition-all duration-200 whitespace-nowrap z-50 border border-gray-600/50 ${
               isExpanded ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
             }`}>
@@ -176,18 +196,25 @@ export const ChatSidebar: React.FC = () => {
           </button>
           
           {/* File Gallery */}
-          <Link
-            href="/chat/gallery"
-            className="relative group p-3 bg-gray-700/80 hover:bg-gray-600/80 text-white rounded-xl transition-all duration-200 hover:scale-105 hover:shadow-lg "
+          <button
+            onClick={handleGalleryClick}
+            disabled={galleryLoading}
+            className={`relative group p-3 bg-gray-700/80 hover:bg-gray-600/80 text-white rounded-xl transition-all duration-200 hover:scale-105 hover:shadow-lg ${
+              galleryLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            }`}
             title="File Gallery"
           >
-            <LibraryBig className="w-5 h-5" />
+            {galleryLoading ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            ) : (
+              <LibraryBig className="w-5 h-5" />
+            )}
             <span className={`absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-gray-800/90 backdrop-blur-sm text-white text-xs rounded-lg px-3 py-1.5 transition-all duration-200 whitespace-nowrap z-50 border border-gray-600/50 ${
               isExpanded ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
             }`}>
               File Gallery
             </span>
-          </Link>
+          </button>
 
           {/* Sessions Indicator */}
           <div className="relative group p-3 bg-gray-700/60 text-gray-300 rounded-xl transition-all duration-200">
@@ -246,18 +273,32 @@ export const ChatSidebar: React.FC = () => {
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={handleNewSession}
-              className="flex items-center gap-2 p-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-blue-500/25 cursor-pointer"
+              disabled={newSessionLoading}
+              className={`flex items-center gap-2 p-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-blue-500/25 ${
+                newSessionLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+              }`}
             >
-              <Plus className="w-4 h-4" />
+              {newSessionLoading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
               <span className="text-sm font-medium">New</span>
             </button>
-            <Link
-              href="/chat/gallery"
-              className="flex items-center gap-2 p-3 bg-gray-700/80 hover:bg-gray-600/80 text-white rounded-xl transition-all duration-200 hover:scale-105"
+            <button
+              onClick={handleGalleryClick}
+              disabled={galleryLoading}
+              className={`flex items-center gap-2 p-3 bg-gray-700/80 hover:bg-gray-600/80 text-white rounded-xl transition-all duration-200 hover:scale-105 ${
+                galleryLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+              }`}
             >
-              <LibraryBig className="w-4 h-4" />
+              {galleryLoading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              ) : (
+                <LibraryBig className="w-4 h-4" />
+              )}
               <span className="text-sm font-medium">Gallery</span>
-            </Link>
+            </button>
           </div>
         </div>
 
@@ -319,8 +360,14 @@ export const ChatSidebar: React.FC = () => {
                     <p className="text-xs mt-1 text-gray-500">Create your first session to get started</p>
                     <button
                       onClick={handleNewSession}
-                      className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors duration-200"
+                      disabled={newSessionLoading}
+                      className={`mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center gap-2 ${
+                        newSessionLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                      }`}
                     >
+                      {newSessionLoading && (
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                      )}
                       Create Session
                     </button>
                   </>

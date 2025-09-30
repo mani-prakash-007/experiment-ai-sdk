@@ -8,10 +8,10 @@ import {
   FileText, 
   Image, 
   File,
-  Check
+  Check,
+  Folder
 } from "lucide-react";
-import { FloatingDockProps, UploadedFile, UploadedFileWithUrl, ModelOption } from '@/app/types/chat';
-import { generatePresignedUrl, isUrlExpired } from '@/utils/presignedUrls';
+import { FloatingDockProps, ModelOption, UploadedFile } from '@/app/types/chat';
 import { useAuth } from '@/app/hooks/useAuth';
 import { toast } from "sonner";
 
@@ -36,7 +36,7 @@ const MODEL_OPTIONS: { [key: string]: ModelOption[] } = {
 // ],
 };
 
-// Updated file type detection
+// File type detection
 const getFileTypeFromMime = (mimeType: string): 'image' | 'pdf' | 'text' | 'markdown' => {
   if (mimeType.startsWith('image/')) return 'image';
   if (mimeType === 'application/pdf') return 'pdf';
@@ -56,8 +56,8 @@ const getFileIcon = (mimeType: string) => {
   }
 };
 
-// Updated utility functions
-// Updated validation function with your specific allowed types
+// Utility functions
+// Validation function with your specific allowed types
 const validateFile = (file: File) => {
   const maxSize = 5 * 1024 * 1024; // 5MB
   
@@ -107,9 +107,12 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   uploadedFile,
   onFileUpload,
   onFileRemove,
+  messageFiles
 }) => {
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [showUploadDropdown, setShowUploadDropdown] = useState(false);
+  const [showKeywordRefDropdown, setShowKeywordRefDropdown] = useState(false);
+  const [showFilesList, setShowFilesList] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -134,6 +137,15 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (input[input.length - 1] === '/') {
+      setShowKeywordRefDropdown(true);
+    } else {
+      setShowKeywordRefDropdown(false);
+      setShowFilesList(false)
+    }
+  }, [input]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -235,38 +247,18 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
     }
   };
 
+  //Handle File Reference
+  const handleFileReference = (file: UploadedFile) => {
+    onFileUpload?.(file);
+    setShowKeywordRefDropdown(false)
+    setShowFilesList(false)
+    setInput(input.slice(0, -1 ))
+  };  
+
   // Handle file removal
   const handleFileRemove = async () => {
     if (!uploadedFile || !user) return;
-
-    try {
-      // Remove from storage via API
-      setIsRemoving(true)
-      const encodedStoragePath = encodeURIComponent(uploadedFile.storagePath);
-      const response = await fetch(`/api/files/${encodedStoragePath}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Error removing file from storage:', errorData.error);
-        toast.error('Error removing file')
-      } else {
-        toast.success('File Removed')
-      }
-
-      if (onFileRemove) {
-        onFileRemove();
-      }
-    } catch (error) {
-      console.error('Error during file removal:', error);
-      toast.error('Error during file removal')
-      if (onFileRemove) {
-        onFileRemove();
-      }
-    }finally{
-      setIsRemoving(false)
-    }
+    onFileRemove?.();
   };
 
   function prettySize( bytes : number) {
@@ -432,6 +424,63 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
 
             {/* Input area */}
             <div className="flex-1 relative group flex justify-center items-center">
+                {showKeywordRefDropdown && (
+                  <div className="absolute bottom-full mb-2 left-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl min-w-48 z-50">
+                  <div 
+                    className="relative"
+                  >
+                    <div 
+                      className="flex items-center  px-3 py-3 text-xs font-medium text-slate-400 uppercase hover:bg-slate-700/50 cursor-pointer rounded-xl"
+                      onClick={() => {
+                        setShowKeywordRefDropdown(false)
+                        setShowUploadDropdown(true)
+                      }}
+                    >
+                      <Upload className="h-4 w-4 mx-3"/>
+                    Upload Files
+                    </div>
+                    <div 
+                      className="flex items-center px-3 py-3 text-xs font-medium text-slate-400 uppercase hover:bg-slate-700/50 cursor-pointer rounded-xl"
+                      onClick={() => {
+                        setShowKeywordRefDropdown(false)
+                        setShowModelDropdown(true)
+                      }}
+                    >
+                      <Sparkles className="h-4 w-4 mx-3"/>
+                    Models
+                    </div>
+                    <div 
+                      className="flex items-center px-3 py-3 text-xs font-medium text-slate-400 uppercase hover:bg-slate-700/50 cursor-pointer rounded-xl"
+                      onClick={() => setShowFilesList(!showFilesList)}
+                    >
+                      <Folder className="h-4 w-4 mx-3"/>
+                    Files
+                    </div>
+                    
+                    {/* Files dropdown */}
+                    {showFilesList && (
+                      <div className="absolute left-full bottom-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 min-w-48 ml-2">
+                      {messageFiles && messageFiles.length > 0 ? (
+                        messageFiles.map((file, index) => (
+                        <div 
+                          key={index}
+                          className="px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 cursor-pointer flex items-center gap-2"
+                          onClick={() => handleFileReference(file)}
+                        >
+                          {getFileIcon(file.metadata.type)}
+                          <span className="truncate">{file.fileName}</span>
+                        </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-slate-400">
+                        No files available
+                        </div>
+                      )}
+                      </div>
+                    )}
+                  </div>
+                  </div>
+                )}
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.currentTarget.value)}

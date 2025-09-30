@@ -81,6 +81,7 @@ export default function Chat() {
     extra?: any;
   } | null>(null);
   const [streamingCompleted, setStreamingCompleted] = useState(false);
+  const [messageFiles, setMessageFiles] = useState<UploadedFile[]>([]);
 
   const aiSubmittedSession = useRef<string | null>(null);
 
@@ -445,6 +446,16 @@ export default function Chat() {
     }
   }, [error, streamingMessageId]);
 
+  // // Update message files when a new file is uploaded
+  useEffect(() => {
+    if (messages.length > 0) {
+      const fileDatas = messages
+        .map((message) => message.file_data)
+        .filter((file): file is UploadedFile => file !== undefined && file !== null);
+      setMessageFiles(fileDatas);
+    }
+  }, [messages]);
+
   if (authLoading) {
     return (
       <div className="flex items-center justify-center h-full w-full">
@@ -539,6 +550,7 @@ export default function Chat() {
                     uploadedFile={uploadedFile}
                     onFileUpload={setUploadedFile}
                     onFileRemove={handleFileRemove}
+                    messageFiles={messageFiles}
                   />
                 </div>
               </div>
