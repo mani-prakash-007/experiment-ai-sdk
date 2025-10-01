@@ -35,6 +35,48 @@ const signInWithGitlab = signInWith('gitlab')
 
 
 /**
+ * Email/Password Sign In
+ */
+const signInWithEmail = async (email: string, password: string) => {
+  const supabase = await createClientForServer()
+  
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
+
+  if (error) {
+    console.error('Email sign-in error:', error)
+    return { error }
+  }
+
+  redirect('/chat')
+}
+
+/**
+ * Email/Password Sign Up
+ */
+const signUpWithEmail = async (email: string, password: string) => {
+  const supabase = await createClientForServer()
+  const auth_callback_url = `${process.env.NEXT_SITE_URL}/auth/callback`
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: auth_callback_url,
+    },
+  })
+
+  if (error) {
+    console.error('Email sign-up error:', error)
+    return { error }
+  }
+
+  return { success: true }
+}
+
+/**
  * Sign-out
  */
 const signOut = async () => {
@@ -49,5 +91,7 @@ const signOut = async () => {
 
 export {
   signInWithGitlab,
+  signInWithEmail,
+  signUpWithEmail,
   signOut,
 }
