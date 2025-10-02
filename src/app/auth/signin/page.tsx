@@ -5,37 +5,102 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { FormEvent, useState } from 'react';
 
+type ValidationErrors = {
+  email?: string;
+  password?: string;
+  general?: string;
+};
+
 export default function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<ValidationErrors>({});
+
+  // Validation functions
+  const validateEmail = (email: string): string | undefined => {
+    if (!email.trim()) return 'Email is required';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return 'Please enter a valid email address';
+    return undefined;
+  };
+
+  const validatePassword = (password: string): string | undefined => {
+    if (!password) return 'Password is required';
+    if (password.length < 6) return 'Password must be at least 6 characters';
+    return undefined;
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors: ValidationErrors = {};
+    
+    const emailError = validateEmail(email);
+    if (emailError) newErrors.email = emailError;
+    
+    const passwordError = validatePassword(password);
+    if (passwordError) newErrors.password = passwordError;
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleEmailLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setErrors({}); // Clear previous errors
+    
+    if (!validateForm()) {
+      return;
+    }
+
     setIsLoading(true);
     
     try {
-      await signInWithEmail(email, password);
+      const result = await signInWithEmail(email, password);
+      
+      if (result?.error) {
+        // Handle specific Supabase auth errors
+        const errorMessage = result.error.message.toLowerCase();
+        if (errorMessage.includes('invalid login credentials')) {
+          setErrors({ general: 'Invalid email or password. Please check your credentials and try again.' });
+        } else if (errorMessage.includes('email not confirmed')) {
+          setErrors({ general: 'Please check your email and click the confirmation link before signing in.' });
+        } else if (errorMessage.includes('too many requests')) {
+          setErrors({ general: 'Too many login attempts. Please wait a moment and try again.' });
+        } else {
+          setErrors({ general: 'Sign in failed. Please try again.' });
+        }
+        setIsLoading(false);
+        return;
+      }
+      
       // Will redirect automatically on success
     } catch (err: any) {
       // Handle redirect silently
       if (err?.message?.includes('NEXT_REDIRECT')) {
         return;
       }
+      setErrors({ general: 'An unexpected error occurred. Please try again.' });
       setIsLoading(false);
     }
   };
 
   const handleGitlabLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setErrors({}); // Clear previous errors
 
     try {
-      await signInWithGitlab();
+      const result = await signInWithGitlab();
+      
+      if (result?.error) {
+        setErrors({ general: 'GitLab sign in failed. Please try again.' });
+        return;
+      }
     } catch (err: any) {
       // Handle redirect silently  
       if (err?.message?.includes('NEXT_REDIRECT')) {
         return;
       }
+      setErrors({ general: 'GitLab sign in failed. Please try again.' });
     }
   };
 
@@ -47,6 +112,13 @@ export default function LoginForm() {
           <p className="text-gray-400">Sign in to your account</p>
         </div>
 
+        {/* General Error Message */}
+        {errors.general && (
+          <div className="p-4 bg-red-900/50 border border-red-700 rounded-lg">
+            <p className="text-red-300 text-sm">{errors.general}</p>
+          </div>
+        )}
+
         {/* Email/Password Login Form */}
         <form onSubmit={handleEmailLogin} className="space-y-4">
           <div>
@@ -55,13 +127,19 @@ export default function LoginForm() {
             </label>
             <input
               id="email"
-              type="email"
+              type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className={`w-full px-3 py-2 bg-gray-800 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${
+                errors.email 
+                  ? 'border-red-500 focus:ring-red-500' 
+                  : 'border-gray-700 focus:ring-blue-500'
+              }`}
               placeholder="Enter your email"
             />
+            {errors.email && (
+              <p className="mt-1 text-sm text-red-400">{errors.email}</p>
+            )}
           </div>
 
           <div>
@@ -73,10 +151,16 @@ export default function LoginForm() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className={`w-full px-3 py-2 bg-gray-800 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${
+                errors.password 
+                  ? 'border-red-500 focus:ring-red-500' 
+                  : 'border-gray-700 focus:ring-blue-500'
+              }`}
               placeholder="Enter your password"
             />
+            {errors.password && (
+              <p className="mt-1 text-sm text-red-400">{errors.password}</p>
+            )}
           </div>
 
           <button
