@@ -20,6 +20,11 @@ interface ChatBubbleProps {
   isStreaming?: boolean;
   isActiveStream?: boolean;
   streamingContent?: string; // Add streaming content prop
+  referencedDocument?: {
+    id: string;
+    title: string;
+  } | null;
+  isEditingMode?: boolean;
 }
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({
@@ -30,6 +35,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   isStreaming = false,
   isActiveStream = false,
   streamingContent = '',
+  referencedDocument = null,
+  isEditingMode = false,
 }) => {
   const [fileUrls, setFileUrls] = useState<{ [key: string]: string }>({});
   const [loadingFiles, setLoadingFiles] = useState<{ [key: string]: boolean }>({});
@@ -299,7 +306,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     // Use streaming content if actively streaming, otherwise use message content
     const displayContent = (isActiveStream && streamingContent) ? streamingContent : message.content;
     const hasContent = typeof displayContent === 'string' && displayContent.trim().length > 0;
-    const hasDocument = !!(message.document_id);
+    const hasDocument = !!(message.document);
 
     // 1. If actively streaming this bubble, show loading or stream content
     if (isStreaming && isActiveStream) {
@@ -319,7 +326,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '0ms' }}></div>
                   <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '150ms' }}></div>
                   <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-2" style={{ animationDelay: '300ms' }}></div>
-                  Preparing document...
+                  {isEditingMode ? 'Editing document...' : 'Preparing document...'}
                 </div>
               </div>
             )}
@@ -414,8 +421,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             message.role === 'user'
               ? 'bg-blue-500 text-white rounded-br-md'
               : 'bg-gray-800 text-gray-100 rounded-bl-md border border-gray-700'
-          } ${message.document_id ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border-white/50' : ''}`}
-          onClick={() => message.document_id && onDocumentClick(message.id, message.document_id)}
+          } ${message.document ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border-white/50' : ''}`}
+          onClick={() => message.document && onDocumentClick(message.id, message.document.doc_id)}
         >
           <div className={`max-w-none text-sm leading-relaxed ${
             message.role === 'assistant' ? 'prose-markdown' : ''
@@ -423,10 +430,30 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             {renderMessageContent()}
           </div>
           {renderFileContent(message.file_data)}
-          {message.document_id && (
+          {referencedDocument && message.role === 'user' && (
+            <div className="mt-2 pt-2 border-t border-blue-400/30 flex items-center space-x-2 text-xs text-blue-300">
+              <FileText className="w-3 h-3" />
+              <span>Referenced Document: {referencedDocument.title}</span>
+              <div className="ml-auto text-xs text-purple-400">
+                📝 Edit Mode
+              </div>
+            </div>
+          )}
+          {message.document && (
             <div className="mt-2 pt-2 border-t border-gray-600 flex items-center space-x-2 text-xs text-gray-300">
               <FileText className="w-3 h-3" />
-              <span>Click to view document</span>
+              <div className="flex-1">
+                <span className="font-medium">{message.document.doc_title}</span>
+                {message.document.doc_version && (
+                  <span className="ml-2 text-xs text-blue-400">v{message.document.doc_version}</span>
+                )}
+                {message.document.reference_type === 'latest' && (
+                  <span className="ml-2 text-xs text-green-400">(Latest)</span>
+                )}
+              </div>
+              <div className="text-xs text-purple-400">
+                📄 Click to {message.document.reference_type === 'latest' ? 'edit' : 'view'}
+              </div>
             </div>
           )}
         </div>

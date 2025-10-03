@@ -37,6 +37,14 @@ function toModelMessages(messages: any[]): ModelMessage[] {
     // Handle original API message format
     const parts: any[] = [];
 
+    // Add document reference context if present
+    if (msg.documentReference) {
+      parts.push({
+        type: "text",
+        text: `[DOCUMENT TO EDIT - Title: "${msg.documentReference.title || 'Untitled'}"]\n\n${msg.documentReference.content || ''}\n\n[END OF DOCUMENT TO EDIT]\n\nPlease apply the following changes to the above document:`,
+      });
+    }
+
     // Add text content if present
     if (msg.content && typeof msg.content === 'string' && msg.content.trim()) {
       parts.push({
@@ -162,6 +170,13 @@ DOCUMENT GENERATION RULES:
   * Structured content (lists, outlines, formatted text)
   * Creative writing (stories, poems, scripts)
   
+DOCUMENT EDITING RULES:
+- When you see "[DOCUMENT TO EDIT]" in the context, this indicates the user wants to edit an existing document
+- Apply the requested changes to the provided document while preserving its original structure and intent
+- Generate a full document response with the edited content
+- Maintain consistency with the original document's style and format
+- Focus on making only the requested changes unless broader improvements are explicitly asked for
+  
 GENERAL RESPONSE RULES:
 - For all other interactions, provide ONLY a general response:
   * Questions and answers
@@ -184,7 +199,7 @@ When providing a general response:
 - Focus your content in the general field with markdown formatting
 - Leave extra field empty or undefined
 
-When generating documents:
+When generating or editing documents:
 - Provide meaningful title
 - Create rich HTML content for the document field using semantic tags
 - Include a brief summary in the general field

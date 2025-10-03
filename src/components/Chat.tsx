@@ -10,7 +10,7 @@ import { useAuth } from '@/app/hooks/useAuth';
 import { useChatSessions } from '@/app/hooks/useChatSessions';
 import { useChatMessages } from '@/app/hooks/useChatMessages';
 import { useDocuments } from '@/app/hooks/useDocument';
-import { Message, ModelOption, UploadedFile, UploadedFileWithUrl } from '@/app/types/chat';
+import { Message, ModelOption, UploadedFile, UploadedFileWithUrl, DocumentReference } from '@/app/types/chat';
 import { generatePresignedUrl } from '@/utils/presignedUrls';
 import { toast } from 'sonner';
 import { useParams } from 'next/navigation';
@@ -57,7 +57,7 @@ export default function Chat() {
 
   const { user, loading: authLoading } = useAuth();
   const { sessions, updateSessionTitle } = useChatSessions(user?.id);
-  const { createDocument, saveDocument } = useDocuments({ userId: user?.id });
+  const { createDocument, saveDocument, getDocumentByReference, getAllUserDocumentsWithVersions } = useDocuments({ userId: user?.id });
 
   const [input, setInput] = useState('');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -68,6 +68,7 @@ export default function Chat() {
     provider: 'Google'
   });
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | UploadedFileWithUrl>();
+  const [documentReference, setDocumentReference] = useState<DocumentReference>();
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>('');
@@ -82,8 +83,12 @@ export default function Chat() {
   } | null>(null);
   const [streamingCompleted, setStreamingCompleted] = useState(false);
   const [messageFiles, setMessageFiles] = useState<UploadedFile[]>([]);
+  const [messageDocumentReferences, setMessageDocumentReferences] = useState<{ [key: string]: { id: string; title: string } }>({});
+  const [isEditingMode, setIsEditingMode] = useState(false);
+  const [allAvailableVersions, setAllAvailableVersions] = useState<any[]>([]);
 
   const aiSubmittedSession = useRef<string | null>(null);
+  const currentDocumentReference = useRef<DocumentReference | null>(null);
 
   const {
     messages,
@@ -119,6 +124,7 @@ export default function Chat() {
   const clearSessionState = () => {
     setInput('');
     setUploadedFile(undefined);
+    setDocumentReference(undefined);
     setIsEditorOpen(false);
     setActiveDocumentId(null);
     setStreamingMessageId(null);
@@ -133,6 +139,10 @@ export default function Chat() {
     }
     aiSubmittedSession.current = null;
     setShouldAutoScroll(false);
+    setMessageDocumentReferences({});
+    setIsEditingMode(false);
+    currentDocumentReference.current = null;
+    setAllAvailableVersions([]);
   };
 
   const generateSessionTitle = async (firstMessage: string) => {
@@ -154,9 +164,19 @@ export default function Chat() {
 
   const handleFileRemove = () => setUploadedFile(undefined);
 
+  const handleDocumentReference = (docRef: DocumentReference) => setDocumentReference(docRef);
+  
+  const handleDocumentReferenceRemove = () => setDocumentReference(undefined);
+
   useEffect(() => {
     clearSessionState();
-  }, [activeSessionId]);
+    // Load all available document versions for this user
+    if (user?.id) {
+      getAllUserDocumentsWithVersions().then(versions => {
+        setAllAvailableVersions(versions);
+      });
+    }
+  }, [activeSessionId, user?.id, getAllUserDocumentsWithVersions]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -211,6 +231,27 @@ export default function Chat() {
       }
     }
 
+    // Fetch document content if document reference is provided
+    let documentContext: any = null;
+    if (documentReference && documentReference.documentId) {
+      try {
+        // Use the new method to get document based on reference type
+        const referenceType = documentReference.version ? 'versioned' : 'latest';
+        const documentData = await getDocumentByReference(
+          documentReference.documentId, 
+          referenceType,
+          documentReference.version
+        );
+        
+        if (documentData) {
+          documentContext = documentData;
+        }
+      } catch (error) {
+        console.error('Error fetching referenced document:', error);
+        toast.error('Failed to fetch referenced document');
+      }
+    }
+
     const userMessage: Omit<Message, 'id' | 'created_at'> = {
       session_id: activeSessionId,
       role: 'user',
@@ -220,9 +261,26 @@ export default function Chat() {
 
     setInput('');
     setUploadedFile(undefined);
+    setDocumentReference(undefined);
 
     const addedMessage = await addMessage(userMessage);
     if (!addedMessage) return;
+
+    // Track document reference for this message and set editing mode
+    if (documentReference) {
+      currentDocumentReference.current = documentReference;
+      setIsEditingMode(true);
+      setMessageDocumentReferences(prev => ({
+        ...prev,
+        [addedMessage.id]: {
+          id: documentReference.documentId,
+          title: documentReference.title || 'Referenced Document'
+        }
+      }));
+    } else {
+      currentDocumentReference.current = null;
+      setIsEditingMode(false);
+    }
 
     const currentSession = sessions.find(s => s.id === activeSessionId);
     if (currentSession?.title === 'Untitled Session' && messages.length === 0) {
@@ -237,7 +295,8 @@ export default function Chat() {
       contextToSend = [{
         role: addedMessage.role,
         content: addedMessage.content,
-        file: fileForLLM // Send with presigned URL to LLM
+        file: fileForLLM, // Send with presigned URL to LLM
+        documentReference: documentContext
       }];
     } else {
       // Generate presigned URLs for all historical messages with files
@@ -262,6 +321,12 @@ export default function Chat() {
           };
         })
       );
+      
+      // Add document reference to the last message if present
+      if (documentContext && messagesWithUrls.length > 0) {
+        (messagesWithUrls[messagesWithUrls.length - 1] as any).documentReference = documentContext;
+      }
+      
       contextToSend = messagesWithUrls;
     }
     aiSubmittedSession.current = activeSessionId;
@@ -373,30 +438,63 @@ export default function Chat() {
             messageUpdates.content = finalContent;
           }
 
-          // Create document first if we have meaningful content
+          // Create or edit document based on context
           const hasContent = streamingDocumentData?.content?.trim();
           const hasTitle = streamingDocumentData?.title?.trim();
-          const shouldCreateDocument = hasContent || hasTitle;
+          const shouldProcessDocument = hasContent || hasTitle;
           
-          if (shouldCreateDocument && streamingDocumentData) {
-            // Create the document with final content
-            const newDocument = await createDocument({
-              title: streamingDocumentData.title || 'Untitled Document',
-              content: streamingDocumentData.content || '',
-              extra: streamingDocumentData.extra,
-            });
+          if (shouldProcessDocument && streamingDocumentData) {
+            // Check if we're editing an existing document (from document reference)
+            const isEditingExistingDocument = currentDocumentReference.current?.documentId;
             
-            if (newDocument) {
-              // Add document ID to the message update
-              messageUpdates.document_id = newDocument.id;
+            if (isEditingExistingDocument && currentDocumentReference.current) {
+              // Edit the existing document using saveDocument (handles versioning)
+              const updatedDocument = await saveDocument(currentDocumentReference.current.documentId, {
+                title: streamingDocumentData.title || 'Untitled Document',
+                content: streamingDocumentData.content || '',
+                extra: streamingDocumentData.extra,
+              });
               
-              // Open the editor with the new document
-              setActiveDocumentId(newDocument.id);
-              setIsEditorOpen(true);
+              if (updatedDocument) {
+                // Add document metadata to the message update
+                messageUpdates.document = {
+                  doc_id: updatedDocument.id,
+                  doc_title: updatedDocument.title,
+                  doc_version: updatedDocument.version_number,
+                  reference_type: 'versioned',
+                  created_at: new Date().toISOString()
+                };
+                
+                // Open the editor with the updated document
+                setActiveDocumentId(updatedDocument.id);
+                setIsEditorOpen(true);
+              }
+            } else {
+              // Create a new document
+              const newDocument = await createDocument({
+                title: streamingDocumentData.title || 'Untitled Document',
+                content: streamingDocumentData.content || '',
+                extra: streamingDocumentData.extra,
+              });
+              
+              if (newDocument) {
+                // Add document metadata to the message update
+                messageUpdates.document = {
+                  doc_id: newDocument.id,
+                  doc_title: newDocument.title,
+                  doc_version: newDocument.version_number,
+                  reference_type: 'latest',
+                  created_at: new Date().toISOString()
+                };
+                
+                // Open the editor with the new document
+                setActiveDocumentId(newDocument.id);
+                setIsEditorOpen(true);
+              }
             }
           }
 
-          // Single API call to update message with both content and document_id
+          // Single API call to update message with both content and document metadata
           if (Object.keys(messageUpdates).length > 0) {
             await updateMessage(streamingMessageId, messageUpdates);
           }
@@ -415,6 +513,8 @@ export default function Chat() {
             streamingTimeoutRef.current = null;
           }
           aiSubmittedSession.current = null;
+          setIsEditingMode(false);
+          currentDocumentReference.current = null;
         }
       }
     };
@@ -455,6 +555,22 @@ export default function Chat() {
       setMessageFiles(fileDatas);
     }
   }, [messages]);
+
+  // Get messages with documents for document reference dropdown (deduplicated by doc_id)
+  // This ensures each document appears only once, showing the latest version
+  const messagesWithDocuments = messages
+    .filter(msg => msg.document && msg.role === 'assistant')
+    .reduce((unique, message) => {
+      // Only keep the latest message for each doc_id
+      const existingIndex = unique.findIndex(m => m.document?.doc_id === message.document?.doc_id);
+      if (existingIndex === -1) {
+        unique.push(message);
+      } else {
+        // Replace with newer message (messages are ordered chronologically)
+        unique[existingIndex] = message;
+      }
+      return unique;
+    }, [] as Message[]);
 
   if (authLoading) {
     return (
@@ -507,6 +623,8 @@ export default function Chat() {
                         isStreaming={!!isLoading}
                         isActiveStream={streamingMessageId === message.id}
                         streamingContent={streamingMessageId === message.id ? streamingContent : ''}
+                        referencedDocument={messageDocumentReferences[message.id] || null}
+                        isEditingMode={isEditingMode && streamingMessageId === message.id}
                       />
                     </div>
                   ))}
@@ -551,6 +669,11 @@ export default function Chat() {
                     onFileUpload={setUploadedFile}
                     onFileRemove={handleFileRemove}
                     messageFiles={messageFiles}
+                    documentReference={documentReference}
+                    onDocumentReference={handleDocumentReference}
+                    onDocumentReferenceRemove={handleDocumentReferenceRemove}
+                    messagesWithDocuments={messagesWithDocuments}
+                    allAvailableVersions={allAvailableVersions}
                   />
                 </div>
               </div>

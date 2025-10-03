@@ -9,9 +9,10 @@ import {
   Image, 
   File,
   Check,
-  Folder
+  Folder,
+  Edit3
 } from "lucide-react";
-import { FloatingDockProps, ModelOption, UploadedFile } from '@/app/types/chat';
+import { FloatingDockProps, ModelOption, UploadedFile, DocumentReference, Message } from '@/app/types/chat';
 import { useAuth } from '@/app/hooks/useAuth';
 import { toast } from "sonner";
 
@@ -107,12 +108,18 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   uploadedFile,
   onFileUpload,
   onFileRemove,
-  messageFiles
+  messageFiles,
+  documentReference,
+  onDocumentReference,
+  onDocumentReferenceRemove,
+  messagesWithDocuments,
+  allAvailableVersions = []
 }) => {
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [showUploadDropdown, setShowUploadDropdown] = useState(false);
   const [showKeywordRefDropdown, setShowKeywordRefDropdown] = useState(false);
   const [showFilesList, setShowFilesList] = useState(false);
+  const [showDocumentsList, setShowDocumentsList] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -143,7 +150,8 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
       setShowKeywordRefDropdown(true);
     } else {
       setShowKeywordRefDropdown(false);
-      setShowFilesList(false)
+      setShowFilesList(false);
+      setShowDocumentsList(false);
     }
   }, [input]);
 
@@ -163,6 +171,11 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
 
     if(uploadedFile){
       toast.error('Only one file allowed. Remove the file to upload new file !')
+      return
+    }
+
+    if(documentReference){
+      toast.error('Cannot upload files while editing a document. Remove document reference first.')
       return
     }
 
@@ -250,15 +263,62 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   //Handle File Reference
   const handleFileReference = (file: UploadedFile) => {
     onFileUpload?.(file);
-    setShowKeywordRefDropdown(false)
-    setShowFilesList(false)
-    setInput(input.slice(0, -1 ))
+    setShowKeywordRefDropdown(false);
+    setShowFilesList(false);
+    setInput(input.slice(0, -1));
+  };
+
+  //Handle Document Reference
+  const handleDocumentReference = (message: Message) => {
+    if (!message.document) return;
+
+    if (uploadedFile) {
+      toast.error('Cannot reference documents while file is uploaded. Remove file first.');
+      return;
+    }
+    
+    const docRef: DocumentReference = {
+      messageId: message.id,
+      documentId: message.document.doc_id,
+      title: message.document.doc_title,
+      version: message.document.doc_version
+    };
+    
+    onDocumentReference?.(docRef);
+    setShowKeywordRefDropdown(false);
+    setShowDocumentsList(false);
+    setInput(input.slice(0, -1));
+  };
+
+  //Handle Version Reference (for new comprehensive version selection)
+  const handleVersionReference = (docId: string, docTitle: string, version: any) => {
+    if (uploadedFile) {
+      toast.error('Cannot reference documents while file is uploaded. Remove file first.');
+      return;
+    }
+    
+    const docRef: DocumentReference = {
+      messageId: '', // No specific message for version references
+      documentId: docId,
+      title: docTitle,
+      version: version.is_current ? undefined : version.version_number // undefined means latest
+    };
+    
+    onDocumentReference?.(docRef);
+    setShowKeywordRefDropdown(false);
+    setShowDocumentsList(false);
+    setInput(input.slice(0, -1));
   };  
 
   // Handle file removal
   const handleFileRemove = async () => {
     if (!uploadedFile || !user) return;
     onFileRemove?.();
+  };
+
+  // Handle document reference removal
+  const handleDocumentReferenceRemove = () => {
+    onDocumentReferenceRemove?.();
   };
 
   function prettySize( bytes : number) {
@@ -311,6 +371,31 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
               <Loader2 className="w-3 h-3 text-slate-400 animate-spin"/> :
               <X className="w-3 h-3 text-slate-400" />
              }
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Document Reference Display */}
+      {documentReference && (
+        <div className="mb-3">
+          <div title={`Referenced Document: ${documentReference.title}`} className="relative bg-purple-800/70 backdrop-blur-sm border border-purple-600/50 rounded-lg p-2 pr-8 flex items-center space-x-2 max-w-xs cursor-default">
+            <div className="w-8 h-8 bg-purple-700 rounded flex items-center justify-center text-purple-300">
+              <Edit3 className="w-4 h-4" />
+            </div>
+            <div className="flex-1 truncate">
+              <span className="text-sm text-purple-300 block truncate">
+                {documentReference.title}
+              </span>
+              <span className="text-xs text-purple-500">
+                Document Reference • Edit Mode
+              </span>
+            </div>
+            <button
+              onClick={handleDocumentReferenceRemove}
+              className="absolute right-1 top-1 transition-opacity p-1 hover:bg-purple-700 rounded cursor-pointer"
+            >
+              <X className="w-3 h-3 text-purple-400" />
             </button>
           </div>
         </div>
@@ -456,6 +541,13 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                       <Folder className="h-4 w-4 mx-3"/>
                     Files
                     </div>
+                    <div 
+                      className="flex items-center px-3 py-3 text-xs font-medium text-slate-400 uppercase hover:bg-slate-700/50 cursor-pointer rounded-xl"
+                      onClick={() => setShowDocumentsList(!showDocumentsList)}
+                    >
+                      <Edit3 className="h-4 w-4 mx-3"/>
+                    Edit Document
+                    </div>
                     
                     {/* Files dropdown */}
                     {showFilesList && (
@@ -478,6 +570,45 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                       )}
                       </div>
                     )}
+
+                    {/* Documents dropdown */}
+                    {showDocumentsList && (
+                      <div className="absolute left-full bottom-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 min-w-64 ml-2 max-h-64 overflow-y-auto">
+                      {allAvailableVersions && allAvailableVersions.length > 0 ? (
+                        allAvailableVersions.map((doc) => (
+                          <div key={doc.doc_id} className="mb-2">
+                            <div className="px-3 py-1 text-xs font-medium text-slate-400 bg-slate-700/30">
+                              {doc.doc_title}
+                            </div>
+                            {doc.versions.map((version: any) => (
+                              <div 
+                                key={`${doc.doc_id}-v${version.version_number}`}
+                                className="px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/50 cursor-pointer flex items-center gap-2 border-l-2 border-slate-600 ml-2"
+                                onClick={() => handleVersionReference(doc.doc_id, doc.doc_title, version)}
+                              >
+                                <FileText className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="truncate font-medium">
+                                    Version {version.version_number}
+                                    {version.is_current && (
+                                      <span className="ml-2 text-xs text-green-400">(Latest)</span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    {new Date(version.created_at).toLocaleString()}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-slate-400">
+                        No documents available for editing
+                        </div>
+                      )}
+                      </div>
+                    )}
                   </div>
                   </div>
                 )}
@@ -485,7 +616,12 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                 value={input}
                 onChange={(e) => setInput(e.currentTarget.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={user ? "Ask me to create a document..." : "Sign in to chat..."}
+                placeholder={
+                  !user ? "Sign in to chat..." :
+                  documentReference ? "Describe how you'd like to edit the document..." :
+                  uploadedFile ? "Ask questions about your file or create a document..." :
+                  "Ask me to create a document..."
+                }
                 disabled={isLoading || !user}
                 autoFocus={!!user}
                 rows={1}

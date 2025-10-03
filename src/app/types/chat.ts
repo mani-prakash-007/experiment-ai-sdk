@@ -45,6 +45,21 @@ export interface ModelOption {
   provider: string;
 }
 
+export interface DocumentReference {
+  messageId: string;
+  documentId: string;
+  title?: string;
+  version?: number;
+}
+
+export interface DocumentMetadata {
+  doc_id: string;
+  doc_title: string;
+  doc_version?: number; // null/undefined means "latest"
+  reference_type: 'latest' | 'versioned';
+  created_at: string;
+}
+
 export interface FloatingDockProps {
   input: string;
   setInput: React.Dispatch<React.SetStateAction<string>>;
@@ -56,6 +71,11 @@ export interface FloatingDockProps {
   onFileUpload?: (files: UploadedFile) => void;
   onFileRemove?: () => void;
   messageFiles: UploadedFile[];
+  documentReference?: DocumentReference;
+  onDocumentReference?: (doc: DocumentReference) => void;
+  onDocumentReferenceRemove?: () => void;
+  messagesWithDocuments: Message[];
+  allAvailableVersions?: any[];
 }
 
 export interface Message {
@@ -63,7 +83,7 @@ export interface Message {
   session_id: string;
   role: 'user' | 'assistant';
   content: string;
-  document_id?: string; // Changed from document object to document ID reference
+  document?: DocumentMetadata; // JSONB document metadata
   file_data?: UploadedFile;
   created_at: string;
 }

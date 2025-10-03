@@ -15,6 +15,7 @@ CREATE TABLE document_versions (
 CREATE INDEX idx_document_versions_document_id ON document_versions(document_id);
 CREATE INDEX idx_document_versions_created_at ON document_versions(created_at DESC);
 CREATE INDEX idx_document_versions_doc_version ON document_versions(document_id, version_number DESC);
+CREATE INDEX idx_document_versions_created_by ON document_versions(created_by);
 
 -- Enable RLS on document_versions
 ALTER TABLE document_versions ENABLE ROW LEVEL SECURITY;
@@ -54,6 +55,7 @@ BEGIN
       title,
       content, 
       extra,
+      change_summary,
       created_by
     )
     VALUES (
@@ -62,6 +64,7 @@ BEGIN
       OLD.title,
       OLD.content,
       OLD.extra,
+      'Document updated',
       OLD.user_id
     );
     
@@ -102,3 +105,6 @@ $$ LANGUAGE plpgsql;
 -- Add helpful comments
 COMMENT ON TABLE document_versions IS 'Stores historical versions of documents for audit trail';
 COMMENT ON COLUMN document_versions.extra IS 'JSON object containing wordCount, estimatedReadTime, tags, category from that version';
+COMMENT ON COLUMN document_versions.change_summary IS 'Brief description of what changed in this version';
+COMMENT ON FUNCTION create_document_version() IS 'Automatically creates version history when documents are updated';
+COMMENT ON FUNCTION cleanup_old_versions(UUID, INTEGER) IS 'Removes old document versions keeping only the latest N versions';

@@ -14,6 +14,7 @@ CREATE TABLE documents (
 CREATE INDEX idx_documents_user_id ON documents(user_id);
 CREATE INDEX idx_documents_updated_at ON documents(updated_at DESC);
 CREATE INDEX idx_documents_user_updated ON documents(user_id, updated_at DESC);
+CREATE INDEX idx_documents_title ON documents(title);
 
 -- Enable RLS on documents
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
@@ -34,3 +35,4 @@ CREATE POLICY "Users can delete own documents" ON documents
 -- Add helpful comments
 COMMENT ON TABLE documents IS 'Stores current versions of user documents with automatic versioning';
 COMMENT ON COLUMN documents.extra IS 'JSON object containing wordCount, estimatedReadTime, tags, category';
+COMMENT ON COLUMN documents.version_number IS 'Current version number, incremented on each update';

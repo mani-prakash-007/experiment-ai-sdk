@@ -7,9 +7,10 @@ CREATE TABLE chat_sessions (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create index for faster queries
+-- Create indexes for faster queries
 CREATE INDEX idx_chat_sessions_user_id ON chat_sessions(user_id);
 CREATE INDEX idx_chat_sessions_updated_at ON chat_sessions(updated_at DESC);
+CREATE INDEX idx_chat_sessions_user_updated ON chat_sessions(user_id, updated_at DESC);
 
 -- Enable RLS
 ALTER TABLE chat_sessions ENABLE ROW LEVEL SECURITY;
@@ -26,3 +27,7 @@ CREATE POLICY "Users can update own sessions" ON chat_sessions
 
 CREATE POLICY "Users can delete own sessions" ON chat_sessions
   FOR DELETE USING (auth.uid() = user_id);
+
+-- Add helpful comments
+COMMENT ON TABLE chat_sessions IS 'Chat sessions for organizing conversations';
+COMMENT ON COLUMN chat_sessions.title IS 'User-defined or auto-generated session title';

@@ -163,14 +163,63 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
     }
   }, []);
 
+  const getDocumentByReference = useCallback(async (
+    docId: string, 
+    referenceType: 'latest' | 'versioned',
+    docVersion?: number
+  ): Promise<Document | null> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        referenceType,
+        ...(docVersion && { docVersion: docVersion.toString() })
+      });
+      
+      const response = await fetch(`/api/documents/${docId}/by-reference?${params}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch document by reference');
+      }
+      const data = await response.json();
+      setLoading(false);
+      return data;
+    } catch (err: any) {
+      setError(err.message);
+      setLoading(false);
+      return null;
+    }
+  }, []);
+
+  const getAllUserDocumentsWithVersions = useCallback(async (): Promise<any[]> => {
+    if (!userId) return [];
+    
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/documents/versions/all`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch all user documents with versions');
+      }
+      const data = await response.json();
+      setLoading(false);
+      return data.versions || [];
+    } catch (err: any) {
+      setError(err.message);
+      setLoading(false);
+      return [];
+    }
+  }, [userId]);
+
   return {
     loading,
     error,
     getDocument,
     getDocumentVersion,
     getVersionMetaList,
-    getAllDocumentVersions,
+    getAllDocumentVersions, // Gets versions for ONE specific document
     saveDocument,
-    createDocument
+    createDocument,
+    getDocumentByReference,
+    getAllUserDocumentsWithVersions // Gets ALL documents with their versions for dropdown
   };
 }
