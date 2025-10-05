@@ -10,7 +10,7 @@ import { useAuth } from '@/app/hooks/useAuth';
 import { useChatSessions } from '@/app/hooks/useChatSessions';
 import { useChatMessages } from '@/app/hooks/useChatMessages';
 import { useDocuments } from '@/app/hooks/useDocument';
-import { Message, ModelOption, UploadedFile, UploadedFileWithUrl, DocumentReference } from '@/app/types/chat';
+import { Message, ModelOption, UploadedFile, UploadedFileWithUrl, DocumentReference, DocumentMetadata } from '@/app/types/chat';
 import { generatePresignedUrl } from '@/utils/presignedUrls';
 import { toast } from 'sonner';
 import { useParams } from 'next/navigation';
@@ -62,6 +62,7 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
+  const [activeDocumentVersion, setActiveDocumentVersion] = useState<number | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelOption>({
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
@@ -83,7 +84,6 @@ export default function Chat() {
   } | null>(null);
   const [streamingCompleted, setStreamingCompleted] = useState(false);
   const [messageFiles, setMessageFiles] = useState<UploadedFile[]>([]);
-  const [messageDocumentReferences, setMessageDocumentReferences] = useState<{ [key: string]: { id: string; title: string } }>({});
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [allAvailableVersions, setAllAvailableVersions] = useState<any[]>([]);
 
@@ -139,7 +139,6 @@ export default function Chat() {
     }
     aiSubmittedSession.current = null;
     setShouldAutoScroll(false);
-    setMessageDocumentReferences({});
     setIsEditingMode(false);
     currentDocumentReference.current = null;
     setAllAvailableVersions([]);
@@ -252,11 +251,24 @@ export default function Chat() {
       }
     }
 
+    // Prepare document reference data if present
+    let documentMetadata: DocumentMetadata | undefined = undefined;
+    if (documentReference) {
+      documentMetadata = {
+        doc_id: documentReference.documentId,
+        doc_title: documentReference.title || 'Referenced Document',
+        doc_version: documentReference.version || undefined,
+        reference_type: documentReference.version ? 'versioned' : 'latest',
+        created_at: new Date().toISOString()
+      };
+    }
+
     const userMessage: Omit<Message, 'id' | 'created_at'> = {
       session_id: activeSessionId,
       role: 'user',
       content: input,
-      file_data: uploadedFile // Store without URL in database
+      file_data: uploadedFile, // Store without URL in database
+      document: documentMetadata // Store document reference in database
     };
 
     setInput('');
@@ -270,13 +282,6 @@ export default function Chat() {
     if (documentReference) {
       currentDocumentReference.current = documentReference;
       setIsEditingMode(true);
-      setMessageDocumentReferences(prev => ({
-        ...prev,
-        [addedMessage.id]: {
-          id: documentReference.documentId,
-          title: documentReference.title || 'Referenced Document'
-        }
-      }));
     } else {
       currentDocumentReference.current = null;
       setIsEditingMode(false);
@@ -342,12 +347,15 @@ export default function Chat() {
   }, [activeSessionId, scrollToBottom]);
 
   // DOC View Logic - now works with document IDs
-  const openDocument = (messageId: string, documentId: string) => {
+  const openDocument = (documentId: string, documentVersion: number | null) => {
     if (documentId) {
       setIsEditorOpen(true);
       setActiveDocumentId(documentId);
+      setActiveDocumentVersion(documentVersion);
     }
   };
+  console.log("activeDocumentId : ", activeDocumentId);
+  console.log("activeDocumentVersion : ", activeDocumentVersion);
 
   const closeEditor = () => {
     setIsEditorOpen(false);
@@ -623,7 +631,6 @@ export default function Chat() {
                         isStreaming={!!isLoading}
                         isActiveStream={streamingMessageId === message.id}
                         streamingContent={streamingMessageId === message.id ? streamingContent : ''}
-                        referencedDocument={messageDocumentReferences[message.id] || null}
                         isEditingMode={isEditingMode && streamingMessageId === message.id}
                       />
                     </div>
@@ -694,6 +701,7 @@ export default function Chat() {
           {isEditorOpen && activeDocumentId && (
             <CanvasTextEditor
               documentId={activeDocumentId}
+              documentVersion={activeDocumentVersion ?? undefined}
               onSave={updateDocument}
               onClose={closeEditor}
               isStreaming={isLoading && streamingMessageId !== null}

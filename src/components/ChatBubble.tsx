@@ -15,15 +15,11 @@ import { toast } from 'sonner';
 interface ChatBubbleProps {
   message: Message;
   user: SupabaseUser | null;
-  onDocumentClick: (messageId: string, documentId: string) => void;
+  onDocumentClick: ( documentId: string , documentVersion : number | null) => void;
   isError?: boolean;
   isStreaming?: boolean;
   isActiveStream?: boolean;
-  streamingContent?: string; // Add streaming content prop
-  referencedDocument?: {
-    id: string;
-    title: string;
-  } | null;
+  streamingContent?: string;
   isEditingMode?: boolean;
 }
 
@@ -35,7 +31,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   isStreaming = false,
   isActiveStream = false,
   streamingContent = '',
-  referencedDocument = null,
   isEditingMode = false,
 }) => {
   const [fileUrls, setFileUrls] = useState<{ [key: string]: string }>({});
@@ -422,7 +417,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               ? 'bg-blue-500 text-white rounded-br-md'
               : 'bg-gray-800 text-gray-100 rounded-bl-md border border-gray-700'
           } ${message.document ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border-white/50' : ''}`}
-          onClick={() => message.document && onDocumentClick(message.id, message.document.doc_id)}
+          onClick={() => message.document && onDocumentClick(message.document.doc_id, message.document.doc_version || null)}
         >
           <div className={`max-w-none text-sm leading-relaxed ${
             message.role === 'assistant' ? 'prose-markdown' : ''
@@ -430,25 +425,25 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             {renderMessageContent()}
           </div>
           {renderFileContent(message.file_data)}
-          {referencedDocument && message.role === 'user' && (
+          {message.document && message.role === 'user' && (
             <div className="mt-2 pt-2 border-t border-blue-400/30 flex items-center space-x-2 text-xs text-blue-300">
               <FileText className="w-3 h-3" />
-              <span>Referenced Document: {referencedDocument.title}</span>
+              <span>Referenced Document: {message.document.doc_title}</span>
+              {message.document.doc_version && (
+                <span className="text-xs text-blue-400">v{message.document.doc_version}</span>
+              )}
               <div className="ml-auto text-xs text-purple-400">
                 📝 Edit Mode
               </div>
             </div>
           )}
-          {message.document && (
+          {message.document && message.role !== 'user' && (
             <div className="mt-2 pt-2 border-t border-gray-600 flex items-center space-x-2 text-xs text-gray-300">
               <FileText className="w-3 h-3" />
               <div className="flex-1">
                 <span className="font-medium">{message.document.doc_title}</span>
                 {message.document.doc_version && (
                   <span className="ml-2 text-xs text-blue-400">v{message.document.doc_version}</span>
-                )}
-                {message.document.reference_type === 'latest' && (
-                  <span className="ml-2 text-xs text-green-400">(Latest)</span>
                 )}
               </div>
               <div className="text-xs text-purple-400">

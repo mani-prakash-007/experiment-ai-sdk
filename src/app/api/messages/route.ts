@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { session_id, role, content, file_data } = body;
+    const { session_id, role, content, file_data, document } = body;
 
     if (!session_id || !role ) {
       return NextResponse.json(
@@ -87,7 +87,8 @@ export async function POST(request: NextRequest) {
         session_id,
         role,
         content,
-        file_data
+        file_data,
+        document
       })
       .select()
       .single();
@@ -102,6 +103,59 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error) {
     console.error('Message creation error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH /api/messages - Update a message
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, content, document } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Message ID is required' },
+        { status: 400 }
+      );
+    }
+
+    const supabase = await createClientForServer();
+    
+    // Verify user is authenticated
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Build update object with only provided fields
+    const updateData: any = {};
+    if (content !== undefined) updateData.content = content;
+    if (document !== undefined) updateData.document = document;
+
+    const { data, error } = await supabase
+      .from('messages')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error('Message update error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

@@ -48,6 +48,7 @@ type EditorDocumentContent = {
 
 type Props = {
   documentId: string;
+  documentVersion?: number;
   onSave: (newValue: EditorDocumentContent) => void;
   onClose?: () => void;
   isStreaming?: boolean;
@@ -155,7 +156,7 @@ const ACTION_BUTTONS = [
   { icon: Redo2, command: 'redo', title: "Redo", exec: (ed: Editor) => ed.chain().focus().redo().run(), canExec: (ed: Editor) => ed.can().redo() },
 ];
 
-const CanvasTextEditor: React.FC<Props> = ({ documentId, onSave, onClose, isStreaming = false }) => {
+const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSave, onClose, isStreaming = false }) => {
   const { getDocument, getDocumentVersion, getVersionMetaList, loading: documentLoading, error: documentError } = useDocuments();
   
   const [transitionOpacity, setTransitionOpacity] = useState(1);
