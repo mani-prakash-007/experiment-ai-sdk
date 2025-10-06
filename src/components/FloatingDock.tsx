@@ -583,7 +583,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
 
                     {/* Documents dropdown */}
                     {showDocumentsList && (
-                      <div className="absolute left-full bottom-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 min-w-64 ml-2 max-h-64 overflow-y-auto">
+                      <div className="absolute left-full bottom-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 w-80 ml-2 max-h-64 overflow-y-auto">
                       {isDocumentVersionsLoading ? (
                         <div className="px-3 py-4 text-sm text-slate-400 flex items-center gap-2">
                           <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-400 border-t-transparent"></div>
@@ -592,7 +592,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                       ) : allAvailableVersions && allAvailableVersions.length > 0 ? (
                         allAvailableVersions.map((doc) => (
                           <div key={doc.doc_id} className="mb-2">
-                            <div className="px-3 py-1 text-xs font-medium text-slate-400 bg-slate-700/30">
+                            <div className="px-3 py-1 text-xs font-medium text-slate-400 bg-slate-700/30 truncate" title={doc.doc_title}>
                               {doc.doc_title}
                             </div>
                             {doc.versions.map((version: any) => (
@@ -609,8 +609,8 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                                       <span className="ml-2 text-xs text-green-400">(Latest)</span>
                                     )}
                                   </div>
-                                  <div className="text-xs text-slate-500">
-                                    {new Date(version.created_at).toLocaleString()}
+                                  <div className="text-xs text-slate-500 truncate" title={version.doc_title}>
+                                    {version.doc_title}
                                   </div>
                                 </div>
                               </div>

@@ -394,6 +394,10 @@ export default function Chat() {
       // Update message metadata to reflect the document update
       if (updatedDocument) {
         updateMessagesDocumentMetadata(activeDocumentId, updatedDocument.version_number);
+        
+        // Reset activeDocumentVersion to null so CanvasTextEditor shows "Latest"
+        // This ensures the version dropdown reflects the newly created version
+        setActiveDocumentVersion(null);
       }
     }
   };
@@ -739,9 +743,11 @@ export default function Chat() {
             <CanvasTextEditor
               documentId={activeDocumentId}
               documentVersion={activeDocumentVersion ?? undefined}
+              documentVersionHandler={(version) => setActiveDocumentVersion(version ?? null)}
               onSave={updateDocument}
               onClose={closeEditor}
               isStreaming={isLoading && streamingMessageId !== null}
+              
             />
           )}
         </div>

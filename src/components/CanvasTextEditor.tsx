@@ -50,6 +50,7 @@ type Props = {
   documentId: string;
   documentVersion?: number; // Specific version to load, null/undefined means latest
   onSave: (newValue: EditorDocumentContent) => void;
+  documentVersionHandler: (version: number | undefined) => void;
   onClose?: () => void;
   isStreaming?: boolean;
 };
@@ -156,7 +157,7 @@ const ACTION_BUTTONS = [
   { icon: Redo2, command: 'redo', title: "Redo", exec: (ed: Editor) => ed.chain().focus().redo().run(), canExec: (ed: Editor) => ed.can().redo() },
 ];
 
-const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSave, onClose, isStreaming = false }) => {
+const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , documentVersionHandler , onSave, onClose, isStreaming = false }) => {
   const { getDocument, getDocumentVersion, getVersionMetaList, loading: documentLoading, error: documentError } = useDocuments();
   
   const [transitionOpacity, setTransitionOpacity] = useState(1);
@@ -811,6 +812,12 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSav
       
       const latestVersion = Math.max(...versions.map(v => v.version_number));
       const isLatest = versionNumber === latestVersion;
+      
+      // Notify parent component about version change
+      if (documentVersionHandler) {
+        documentVersionHandler(isLatest ? undefined : versionNumber);
+      }
+      
       toast.success(`Switched to ${isLatest ? 'latest version' : `version ${versionNumber}`}`);
     } catch (error) {
       console.error('Error switching version:', error);
