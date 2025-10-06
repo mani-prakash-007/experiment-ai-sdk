@@ -303,7 +303,8 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSav
             setCurrentVersion(documentVersion);
           }
         } else {
-          // Fetch latest version
+          // Fetch latest version - reset currentVersion to null first
+          setCurrentVersion(null);
           doc = await getDocument(currentDocumentId);
           isVersionedView = false;
         }
@@ -364,8 +365,8 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSav
           if (documentVersion !== undefined && documentVersion !== null) {
             // Use the specific version that was requested
             setCurrentVersion(documentVersion);
-          } else if (currentVersion === null) {
-            // Default to latest version
+          } else {
+            // Default to latest version when documentVersion is null/undefined
             const latestVersion = Math.max(...versionsList.map(v => v.version_number));
             setCurrentVersion(latestVersion);
           }
@@ -954,9 +955,9 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSav
                 >
                   <History className="w-4 h-4" />
                   <span>
-                    {currentVersion === Math.max(...versions.map(v => v.version_number)) 
+                    {versions.length > 0 && currentVersion === Math.max(...versions.map(v => v.version_number)) 
                       ? 'Latest' 
-                      : `v${currentVersion}`
+                      : currentVersion ? `v${currentVersion}` : 'Latest'
                     }
                   </span>
                   <ChevronDown className={`w-4 h-4 transition-transform ${isVersionDropdownOpen ? 'rotate-180' : ''}`} />

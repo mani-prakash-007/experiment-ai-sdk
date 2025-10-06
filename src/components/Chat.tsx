@@ -131,6 +131,28 @@ export default function Chat() {
     setAllAvailableVersions([]);
   };
 
+  // Function to update message document metadata when a document is updated
+  // This mirrors the database trigger behavior: change reference_type from 'latest' to 'versioned'
+  const updateMessagesDocumentMetadata = useCallback((documentId: string, newVersionNumber: number) => {
+    messages?.forEach(message => {
+      if (message.document && 
+          message.document.doc_id === documentId && 
+          message.document.reference_type === 'latest') {
+        
+        // Update the message to mark old version as 'versioned'
+        const updatedMessage = {
+          ...message,
+          document: {
+            ...message.document,
+            reference_type: 'versioned' as const
+          }
+        };
+        
+        updateMessage(message.id, updatedMessage);
+      }
+    });
+  }, [messages, updateMessage]);
+
   // Function to fetch document versions on demand (when user clicks edit document)
   const fetchDocumentVersionsOnDemand = useCallback(async () => {
     if (user?.id && activeSessionId) {
@@ -357,6 +379,7 @@ export default function Chat() {
   };
   console.log("activeDocumentId : ", activeDocumentId);
   console.log("activeDocumentVersion : ", activeDocumentVersion);
+  console.log('Messages : ', messages);
 
   const closeEditor = () => {
     setIsEditorOpen(false);
@@ -365,8 +388,13 @@ export default function Chat() {
 
   const updateDocument = async (documentContent: EditorDocumentContent) => {
     if (activeDocumentId) {
-      await saveDocument(activeDocumentId, documentContent);
+      const updatedDocument = await saveDocument(activeDocumentId, documentContent);
       toast.success('Document Saved');
+      
+      // Update message metadata to reflect the document update
+      if (updatedDocument) {
+        updateMessagesDocumentMetadata(activeDocumentId, updatedDocument.version_number);
+      }
     }
   };
 
@@ -464,6 +492,11 @@ export default function Chat() {
                 extra: streamingDocumentData.extra,
               });
               console.log('Updated Document : ',updatedDocument);
+              
+              // Update message metadata to reflect the document update
+              if (updatedDocument) {
+                updateMessagesDocumentMetadata(currentDocumentReference.current.documentId, updatedDocument.version_number);
+              }
               
               if (updatedDocument) {
                 // Add document metadata to the message update
