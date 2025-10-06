@@ -48,7 +48,7 @@ type EditorDocumentContent = {
 
 type Props = {
   documentId: string;
-  documentVersion?: number;
+  documentVersion?: number; // Specific version to load, null/undefined means latest
   onSave: (newValue: EditorDocumentContent) => void;
   onClose?: () => void;
   isStreaming?: boolean;
@@ -272,7 +272,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSav
     }
   }, [documentId, currentDocumentId, editor]);
 
-  // Fetch document data when currentDocumentId changes (not original documentId)
+  // Fetch document data when currentDocumentId or documentVersion changes
   useEffect(() => {
     const fetchDocument = async () => {
       if (!currentDocumentId) {
@@ -281,7 +281,33 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSav
       }
       
       try {
-        const doc = await getDocument(currentDocumentId);
+        let doc;
+        let isVersionedView = false;
+        
+        // Check if we need to fetch a specific version
+        if (documentVersion !== undefined && documentVersion !== null) {
+          // Fetch specific version
+          const versionDoc = await getDocumentVersion(currentDocumentId, documentVersion);
+          if (versionDoc) {
+            doc = {
+              id: versionDoc.document_id,
+              user_id: '', // Not needed for display
+              version_number: versionDoc.version_number,
+              title: versionDoc.title,
+              content: versionDoc.content,
+              extra: versionDoc.extra,
+              created_at: versionDoc.created_at,
+              updated_at: versionDoc.created_at
+            };
+            isVersionedView = true;
+            setCurrentVersion(documentVersion);
+          }
+        } else {
+          // Fetch latest version
+          doc = await getDocument(currentDocumentId);
+          isVersionedView = false;
+        }
+        
         if (doc) {
           setTitle(doc.title || '');
           setCategory(doc.extra?.category || '');
@@ -300,12 +326,11 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSav
           setPristine(documentContent);
           setDocumentNotFound(false);
           setDocumentFetched(true);
+          setIsViewingVersion(isVersionedView);
 
-          // Update editor content with smooth transition
-          if (editor && editor.getHTML() !== doc.content) {
-            setTimeout(() => {
-              editor.commands.setContent(doc.content || '');
-            }, 100);
+          // Update editor content without delay to prevent flickering
+          if (editor) {
+            editor.commands.setContent(doc.content || '', { emitUpdate: false });
           }
         } else {
           if (!isStreaming) {
@@ -323,7 +348,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSav
     };
 
     fetchDocument();
-  }, [currentDocumentId, getDocument, isStreaming, editor]);
+  }, [currentDocumentId, documentVersion, getDocument, getDocumentVersion, isStreaming, editor]);
 
   // Fetch versions when document loads (use currentDocumentId)
   useEffect(() => {
@@ -333,9 +358,17 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSav
       try {
         const versionsList = await getVersionMetaList(currentDocumentId);
         setVersions(versionsList);
-        if (versionsList.length > 0 && currentVersion === null) {
-          const latestVersion = Math.max(...versionsList.map(v => v.version_number));
-          setCurrentVersion(latestVersion);
+        
+        // Set current version based on what was passed or default to latest
+        if (versionsList.length > 0) {
+          if (documentVersion !== undefined && documentVersion !== null) {
+            // Use the specific version that was requested
+            setCurrentVersion(documentVersion);
+          } else if (currentVersion === null) {
+            // Default to latest version
+            const latestVersion = Math.max(...versionsList.map(v => v.version_number));
+            setCurrentVersion(latestVersion);
+          }
         }
       } catch (error) {
         console.error('Error fetching versions:', error);
@@ -343,7 +376,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSav
     };
 
     fetchVersions();
-  }, [currentDocumentId, getVersionMetaList, documentFetched, currentVersion]);
+  }, [currentDocumentId, documentVersion, getVersionMetaList, documentFetched, currentVersion]);
 
   // Handle streaming state changes
   useEffect(() => {
@@ -1108,11 +1141,10 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , onSav
       {isVersionDropdownOpen && dropdownPosition && typeof window !== 'undefined' && createPortal(
         <div
           id="version-dropdown-portal"
-          className="fixed w-80 bg-zinc-950 border border-zinc-700 rounded-lg shadow-2xl max-h-64 overflow-y-auto backdrop-blur-sm"
+          className="fixed w-80 bg-zinc-950 border border-zinc-700 rounded-lg shadow-2xl max-h-64 overflow-y-auto backdrop-blur-sm z-[99999]"
           style={{
             top: `${dropdownPosition.top}px`,
-            right: `${dropdownPosition.right}px`,
-            zIndex: 99999
+            right: `${dropdownPosition.right}px`
           }}
         >
           <div className="p-2">

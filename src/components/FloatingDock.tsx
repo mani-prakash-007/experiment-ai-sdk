@@ -113,7 +113,9 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   onDocumentReference,
   onDocumentReferenceRemove,
   messagesWithDocuments,
-  allAvailableVersions = []
+  allAvailableVersions = [],
+  onFetchDocumentVersions,
+  isDocumentVersionsLoading = false
 }) => {
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [showUploadDropdown, setShowUploadDropdown] = useState(false);
@@ -543,7 +545,15 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                     </div>
                     <div 
                       className="flex items-center px-3 py-3 text-xs font-medium text-slate-400 uppercase hover:bg-slate-700/50 cursor-pointer rounded-xl"
-                      onClick={() => setShowDocumentsList(!showDocumentsList)}
+                      onClick={async () => {
+                        const newShowState = !showDocumentsList;
+                        setShowDocumentsList(newShowState);
+                        
+                        // Fetch document versions when opening the dropdown
+                        if (newShowState && onFetchDocumentVersions) {
+                          await onFetchDocumentVersions();
+                        }
+                      }}
                     >
                       <Edit3 className="h-4 w-4 mx-3"/>
                     Edit Document
@@ -574,7 +584,12 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                     {/* Documents dropdown */}
                     {showDocumentsList && (
                       <div className="absolute left-full bottom-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 min-w-64 ml-2 max-h-64 overflow-y-auto">
-                      {allAvailableVersions && allAvailableVersions.length > 0 ? (
+                      {isDocumentVersionsLoading ? (
+                        <div className="px-3 py-4 text-sm text-slate-400 flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-400 border-t-transparent"></div>
+                          Loading documents...
+                        </div>
+                      ) : allAvailableVersions && allAvailableVersions.length > 0 ? (
                         allAvailableVersions.map((doc) => (
                           <div key={doc.doc_id} className="mb-2">
                             <div className="px-3 py-1 text-xs font-medium text-slate-400 bg-slate-700/30">

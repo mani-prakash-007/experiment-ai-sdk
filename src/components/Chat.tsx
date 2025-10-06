@@ -86,6 +86,7 @@ export default function Chat() {
   const [messageFiles, setMessageFiles] = useState<UploadedFile[]>([]);
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [allAvailableVersions, setAllAvailableVersions] = useState<any[]>([]);
+  const [isDocumentVersionsLoading, setIsDocumentVersionsLoading] = useState(false);
 
   const aiSubmittedSession = useRef<string | null>(null);
   const currentDocumentReference = useRef<DocumentReference | null>(null);
@@ -122,28 +123,32 @@ export default function Chat() {
   }, []);
 
   const clearSessionState = () => {
-    setInput('');
-    setUploadedFile(undefined);
-    setDocumentReference(undefined);
-    setIsEditorOpen(false);
-    setActiveDocumentId(null);
     setStreamingMessageId(null);
-    setStreamingStarted(false);
-    setStreamingDocumentData(null);
-    setStreamingCompleted(false);
     setStreamingContent('');
     streamingContentRef.current = '';
-    if (streamingTimeoutRef.current) {
-      clearTimeout(streamingTimeoutRef.current);
-      streamingTimeoutRef.current = null;
-    }
-    aiSubmittedSession.current = null;
     setShouldAutoScroll(false);
-    setIsEditingMode(false);
-    currentDocumentReference.current = null;
+    setStreamingDocumentData({ title: '', content: '', extra: undefined });
     setAllAvailableVersions([]);
   };
 
+  // Function to fetch document versions on demand (when user clicks edit document)
+  const fetchDocumentVersionsOnDemand = useCallback(async () => {
+    if (user?.id && activeSessionId) {
+      setIsDocumentVersionsLoading(true);
+      try {
+        const versions = await getAllUserDocumentsWithVersions(activeSessionId);
+        setAllAvailableVersions(versions);
+        return versions;
+      } catch (error) {
+        console.error('Failed to fetch document versions:', error);
+        return [];
+      } finally {
+        setIsDocumentVersionsLoading(false);
+      }
+    }
+    return [];
+  }, [user?.id, activeSessionId, getAllUserDocumentsWithVersions]);  
+  
   const generateSessionTitle = async (firstMessage: string) => {
     try {
       const response = await fetch('/api/generate-title', {
@@ -169,13 +174,9 @@ export default function Chat() {
 
   useEffect(() => {
     clearSessionState();
-    // Load all available document versions for this user
-    if (user?.id) {
-      getAllUserDocumentsWithVersions().then(versions => {
-        setAllAvailableVersions(versions);
-      });
-    }
-  }, [activeSessionId, user?.id, getAllUserDocumentsWithVersions]);
+    // Clear document versions when session changes
+    setAllAvailableVersions([]);
+  }, [activeSessionId]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -377,7 +378,7 @@ export default function Chat() {
     }
   }, [handleScroll]);
 
-  // STREAMING LOGIC - Fixed to prevent infinite loops
+  // STREAMING LOGIC 
   useEffect(() => {
     const handleStreaming = async () => {
       // Only process if this is the active session and we have streaming data
@@ -462,6 +463,7 @@ export default function Chat() {
                 content: streamingDocumentData.content || '',
                 extra: streamingDocumentData.extra,
               });
+              console.log('Updated Document : ',updatedDocument);
               
               if (updatedDocument) {
                 // Add document metadata to the message update
@@ -469,7 +471,7 @@ export default function Chat() {
                   doc_id: updatedDocument.id,
                   doc_title: updatedDocument.title,
                   doc_version: updatedDocument.version_number,
-                  reference_type: 'versioned',
+                  reference_type: 'latest',
                   created_at: new Date().toISOString()
                 };
                 
@@ -681,6 +683,8 @@ export default function Chat() {
                     onDocumentReferenceRemove={handleDocumentReferenceRemove}
                     messagesWithDocuments={messagesWithDocuments}
                     allAvailableVersions={allAvailableVersions}
+                    onFetchDocumentVersions={fetchDocumentVersionsOnDemand}
+                    isDocumentVersionsLoading={isDocumentVersionsLoading}
                   />
                 </div>
               </div>

@@ -5,21 +5,12 @@
 CREATE OR REPLACE FUNCTION update_message_document_reference()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- When a new version is created, update the most recent message that references this document
-  -- from 'latest' to the specific version that was just created
+  -- When a new version is created, update ALL messages that reference this document
+  -- from 'latest' to 'versioned' (keeping their original version number)
   UPDATE messages 
-  SET document = jsonb_set(
-    jsonb_set(document, '{doc_version}', to_jsonb(NEW.version_number)),
-    '{reference_type}', '"versioned"'
-  )
+  SET document = jsonb_set(document, '{reference_type}', '"versioned"')
   WHERE document->>'doc_id' = NEW.document_id::text
-    AND document->>'reference_type' = 'latest'
-    AND created_at = (
-      SELECT MAX(created_at) 
-      FROM messages 
-      WHERE document->>'doc_id' = NEW.document_id::text
-        AND document->>'reference_type' = 'latest'
-    );
+    AND document->>'reference_type' = 'latest';
     
   RETURN NEW;
 END;
@@ -90,56 +81,55 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to get all available versions for document selection
-CREATE OR REPLACE FUNCTION get_all_document_versions_for_user(user_id UUID)
+-- Function to get all available versions for document selection by session
+CREATE OR REPLACE FUNCTION get_all_document_versions_for_session(session_id UUID)
 RETURNS TABLE(
   doc_id UUID,
   doc_title TEXT,
   doc_version INTEGER,
   reference_type TEXT,
   is_current BOOLEAN,
-  created_at TIMESTAMP WITH TIME ZONE,
-  message_id UUID
+  created_at TIMESTAMP WITH TIME ZONE
 ) AS $$
 BEGIN
   RETURN QUERY
-  -- Get current versions from documents table
-  SELECT 
+  -- Get latest versions from documents table for documents referenced in this session
+  SELECT DISTINCT
     d.id as doc_id,
     d.title as doc_title,
     d.version_number as doc_version,
     'latest'::TEXT as reference_type,
     true as is_current,
-    d.updated_at as created_at,
-    m.id as message_id
+    d.updated_at as created_at
   FROM documents d
-  LEFT JOIN messages m ON m.document->>'doc_id' = d.id::text 
-    AND m.document->>'reference_type' = 'latest'
-  WHERE d.user_id = get_all_document_versions_for_user.user_id
+  JOIN messages m ON (m.document->>'doc_id')::UUID = d.id
+  WHERE m.session_id = get_all_document_versions_for_session.session_id
+    AND m.role = 'assistant'
+    AND m.document IS NOT NULL
   
-  UNION ALL
+  UNION
   
-  -- Get historical versions from document_versions table
-  SELECT 
+  -- Get historical versions from document_versions table for documents referenced in this session
+  SELECT DISTINCT
     dv.document_id as doc_id,
     dv.title as doc_title,
     dv.version_number as doc_version,
     'versioned'::TEXT as reference_type,
     false as is_current,
-    dv.created_at,
-    m.id as message_id
+    dv.created_at
   FROM document_versions dv
-  JOIN documents d ON d.id = dv.document_id
-  LEFT JOIN messages m ON m.document->>'doc_id' = dv.document_id::text 
-    AND (m.document->>'doc_version')::INTEGER = dv.version_number
-    AND m.document->>'reference_type' = 'versioned'
-  WHERE d.user_id = get_all_document_versions_for_user.user_id
+  JOIN messages m ON (m.document->>'doc_id')::UUID = dv.document_id
+  WHERE m.session_id = get_all_document_versions_for_session.session_id
+    AND m.role = 'assistant'
+    AND m.document IS NOT NULL
+  
   ORDER BY doc_id, doc_version DESC;
 END;
 $$ LANGUAGE plpgsql;
 
+
 -- Add helpful comments
-COMMENT ON FUNCTION update_message_document_reference() IS 'Automatically updates message document references from latest to versioned when new versions are created';
+COMMENT ON FUNCTION update_message_document_reference() IS 'Automatically updates ALL message document references from latest to versioned when new versions are created';
 COMMENT ON FUNCTION get_document_info(UUID) IS 'Helper function to extract document metadata from message JSONB';
 COMMENT ON FUNCTION get_document_content(UUID, TEXT, INTEGER) IS 'Fetches document content from appropriate table based on reference type (latest from documents, versioned from document_versions)';
-COMMENT ON FUNCTION get_all_document_versions_for_user(UUID) IS 'Returns all document versions available for editing, including latest and historical versions for dropdown selection';
+COMMENT ON FUNCTION get_all_document_versions_for_session(UUID) IS 'Returns document versions for assistant role messages within a specific session only, including latest and historical versions with document titles for dropdown selection';

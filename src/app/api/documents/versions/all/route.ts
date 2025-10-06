@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClientForServer } from '@/utils/supabase/server';
 
-// GET /api/documents/versions/all - Get all document versions available for editing
+// GET /api/documents/versions/all?sessionId=xxx - Get all document versions available for editing in a specific session
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClientForServer();
@@ -15,9 +15,35 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Use the database function to get all available versions
-    const { data, error } = await supabase.rpc('get_all_document_versions_for_user', {
-      user_id: user.id
+    // Get sessionId from query parameters
+    const { searchParams } = new URL(request.url);
+    const sessionId = searchParams.get('sessionId');
+    
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: 'sessionId is required' },
+        { status: 400 }
+      );
+    }
+
+    // Verify that the session belongs to the authenticated user
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('chat_sessions')
+      .select('id, user_id')
+      .eq('id', sessionId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (sessionError || !sessionData) {
+      return NextResponse.json(
+        { error: 'Session not found or unauthorized' },
+        { status: 404 }
+      );
+    }
+
+    // Use the database function to get all available versions for the session
+    const { data, error } = await supabase.rpc('get_all_document_versions_for_session', {
+      session_id: sessionId
     });
 
     if (error) {
@@ -42,6 +68,7 @@ export async function GET(request: NextRequest) {
       acc[docId].versions.push({
         version_number: version.doc_version,
         reference_type: version.reference_type,
+        doc_title: version.doc_title,
         is_current: version.is_current,
         created_at: version.created_at,
         message_id: version.message_id

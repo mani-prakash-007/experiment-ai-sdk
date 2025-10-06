@@ -190,13 +190,13 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
     }
   }, []);
 
-  const getAllUserDocumentsWithVersions = useCallback(async (): Promise<any[]> => {
-    if (!userId) return [];
+  const getAllUserDocumentsWithVersions = useCallback(async (sessionId?: string): Promise<any[]> => {
+    if (!userId || !sessionId) return [];
     
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/documents/versions/all`);
+      const response = await fetch(`/api/documents/versions/all?sessionId=${sessionId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch all user documents with versions');
       }
@@ -220,6 +220,6 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
     saveDocument,
     createDocument,
     getDocumentByReference,
-    getAllUserDocumentsWithVersions // Gets ALL documents with their versions for dropdown
+    getAllUserDocumentsWithVersions // Gets ALL documents with their versions for dropdown (requires sessionId)
   };
 }

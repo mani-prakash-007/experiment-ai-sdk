@@ -412,12 +412,25 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       </div>
       <div className={`flex-1 max-w-[80%] w-full ${message.role === 'user' ? 'flex justify-end' : ''}`}>
         <div
-          className={`rounded-2xl px-4 py-3 shadow-sm ${
-            message.role === 'user'
-              ? 'bg-blue-500 text-white rounded-br-md'
+          className={`
+            rounded-2xl px-4 py-3 shadow-sm
+            ${message.role === 'user' 
+              ? 'bg-blue-500 text-white rounded-br-md' 
               : 'bg-gray-800 text-gray-100 rounded-bl-md border border-gray-700'
-          } ${message.document ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border-white/50' : ''}`}
-          onClick={() => message.document && onDocumentClick(message.document.doc_id, message.document.doc_version || null)}
+            }
+            ${message.document 
+              ? 'cursor-pointer hover:shadow-xl transition-shadow hover:border-white/50' 
+              : ''
+            }
+          `}
+          onClick={() => {
+            if (message.document) {
+              const version = message.document.reference_type === 'latest' 
+                ? null 
+                : message.document.doc_version || null;
+              onDocumentClick(message.document.doc_id, version);
+            }
+          }}
         >
           <div className={`max-w-none text-sm leading-relaxed ${
             message.role === 'assistant' ? 'prose-markdown' : ''
