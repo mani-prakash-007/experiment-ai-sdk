@@ -27,16 +27,15 @@ const signInWith = (provider: Provider) => {
     }
   }
 }
-/**
- * Gitlab - OAuth
- */
+ 
+//  Gitlab - OAuth
+
 const signInWithGitlab = signInWith('gitlab')
 
 
 
-/**
- * Email/Password Sign In
- */
+//  Email/Password Sign In
+
 const signInWithEmail = async (email: string, password: string) => {
   const supabase = await createClientForServer()
   
@@ -53,9 +52,9 @@ const signInWithEmail = async (email: string, password: string) => {
   redirect('/chat')
 }
 
-/**
- * Email/Password Sign Up
- */
+
+//  Email/Password Sign Up
+
 const signUpWithEmail = async (email: string, password: string) => {
   const supabase = await createClientForServer()
   const auth_callback_url = `${process.env.NEXT_SITE_URL}/auth/callback`
@@ -76,9 +75,9 @@ const signUpWithEmail = async (email: string, password: string) => {
   return { success: true }
 }
 
-/**
- * Sign-out
- */
+
+  // Sign-out
+
 const signOut = async () => {
   const supabase = await createClientForServer()
   const { error } = await supabase.auth.signOut()

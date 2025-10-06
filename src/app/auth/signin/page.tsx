@@ -72,8 +72,6 @@ export default function LoginForm() {
         setIsLoading(false);
         return;
       }
-      
-      // Will redirect automatically on success
     } catch (err: any) {
       // Handle redirect silently
       if (err?.message?.includes('NEXT_REDIRECT')) {

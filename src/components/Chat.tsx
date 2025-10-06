@@ -369,7 +369,7 @@ export default function Chat() {
     }, 2000);
   }, [activeSessionId, scrollToBottom]);
 
-  // DOC View Logic - now works with document IDs
+  // DOC View Logic 
   const openDocument = (documentId: string, documentVersion: number | null) => {
     if (documentId) {
       setIsEditorOpen(true);
@@ -377,9 +377,6 @@ export default function Chat() {
       setActiveDocumentVersion(documentVersion);
     }
   };
-  console.log("activeDocumentId : ", activeDocumentId);
-  console.log("activeDocumentVersion : ", activeDocumentVersion);
-  console.log('Messages : ', messages);
 
   const closeEditor = () => {
     setIsEditorOpen(false);
@@ -495,7 +492,6 @@ export default function Chat() {
                 content: streamingDocumentData.content || '',
                 extra: streamingDocumentData.extra,
               });
-              console.log('Updated Document : ',updatedDocument);
               
               // Update message metadata to reflect the document update
               if (updatedDocument) {

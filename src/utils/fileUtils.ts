@@ -1,6 +1,6 @@
-/**
- * Utility functions for handling file operations in the gallery
- */
+
+  // Utility functions for handling file operations in the gallery
+
 
 export const downloadFile = async (url: string, filename: string): Promise<void> => {
   try {

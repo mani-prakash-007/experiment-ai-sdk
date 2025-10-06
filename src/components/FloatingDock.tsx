@@ -67,15 +67,10 @@ const validateFile = (file: File) => {
     'application/pdf',
     'text/plain',
     'text/markdown',
-    'text/x-markdown',
     // Image types (image/*)
     'image/jpeg',
     'image/png',
     'image/gif',
-    'image/webp',
-    'image/svg+xml',
-    'image/bmp',
-    'image/tiff'
   ];
 
   if (file.size > maxSize) {
@@ -123,7 +118,6 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   const [showFilesList, setShowFilesList] = useState(false);
   const [showDocumentsList, setShowDocumentsList] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [isRemoving, setIsRemoving] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -369,10 +363,8 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
               onClick={handleFileRemove}
               className="absolute right-1 top-1 transition-opacity p-1 hover:bg-slate-700 rounded cursor-pointer"
             >
-             { isRemoving ? 
               <Loader2 className="w-3 h-3 text-slate-400 animate-spin"/> :
               <X className="w-3 h-3 text-slate-400" />
-             }
             </button>
           </div>
         </div>

@@ -16,7 +16,7 @@ export async function DELETE(
       );
     }
 
-    // Decode the storage path (it may be URL encoded)
+    // Decode the storage path (URL encoded)
     const decodedStoragePath = decodeURIComponent(storagePath);
 
     const supabase = await createClientForServer();

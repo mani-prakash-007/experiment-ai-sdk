@@ -292,7 +292,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , docum
           if (versionDoc) {
             doc = {
               id: versionDoc.document_id,
-              user_id: '', // Not needed for display
+              user_id: '',
               version_number: versionDoc.version_number,
               title: versionDoc.title,
               content: versionDoc.content,
@@ -425,7 +425,8 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , docum
     setEditable(true);
   };
 
-  // Compare against pristine on every edit (not value, not toggling)
+  // Detect unsaved changes by comparing current document fields to the last saved (pristine) state.
+  // This effect runs on every change to title, category, tags, or content, except when toggling edit mode or resetting to pristine.
   useEffect(() => {
     setHasUnsaved(isDocEdited(
       { title, extra: { category, tags }, content },
@@ -477,7 +478,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , docum
     setCountdownSeconds(0);
     setShouldAutoSave(false);
     autoSaveToastShownRef.current = false;
-  }, []); // Remove dependencies that cause re-renders
+  }, []);
 
   // Auto-save: Start countdown when inactive
   const startCountdown = useCallback(() => {
@@ -572,7 +573,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , docum
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [shouldAutoSave]); // Minimal dependencies
+  }, [shouldAutoSave]);
 
   // Auto-save: Monitor inactivity when in edit mode with unsaved changes
   useEffect(() => {
@@ -610,7 +611,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , docum
     return () => {
       clearTimeout(timer);
     };
-  }, [lastActivity, editable, hasUnsaved, isStreaming, isStreamingActive, startCountdown]); // Fixed dependencies
+  }, [lastActivity, editable, hasUnsaved, isStreaming, isStreamingActive, startCountdown]);
 
   // Auto-save: Add event listeners for user activity
   useEffect(() => {
@@ -659,7 +660,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , docum
         }
       };
       
-      await onSave(updatedDoc);
+      onSave(updatedDoc);
       setEditable(false);
       setPristine(updatedDoc);
       

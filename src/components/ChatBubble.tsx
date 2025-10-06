@@ -295,7 +295,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     ),
   };
 
-  // ENHANCED MAIN CONTENT RENDER LOGIC:
   const renderMessageContent = () => {
     const isAssistant = message.role === 'assistant';
     // Use streaming content if actively streaming, otherwise use message content
