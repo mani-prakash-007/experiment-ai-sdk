@@ -27,6 +27,7 @@ export default function LoginForm() {
 
   const validatePassword = (password: string): string | undefined => {
     if (!password) return 'Password is required';
+    if (password.length > 128) return 'Password was too long';
     if (password.length < 6) return 'Password must be at least 6 characters';
     return undefined;
   };
@@ -46,8 +47,24 @@ export default function LoginForm() {
 
   const handleEmailLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setErrors({}); // Clear previous errors
     
+    // Clear all existing errors first
+    setErrors({});
+    
+    // Step 1: Validate email first
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setErrors({ email: emailError });
+      return;
+    }
+    
+    // Step 2: Validate password length
+    if (password.length > 128) {
+      setErrors({ password: 'Password was too long' });
+      return;
+    }
+    
+    // Step 3: Run complete form validation for remaining checks
     if (!validateForm()) {
       return;
     }

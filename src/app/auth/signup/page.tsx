@@ -30,6 +30,7 @@ export default function SignupForm() {
 
   const validatePassword = (password: string): string | undefined => {
     if (!password) return 'Password is required';
+    if (password.length > 128) return 'Password was too long';
     if (password.length < 8) return 'Password must be at least 8 characters';
     if (!/[a-z]/.test(password)) return 'Password must contain at least one lowercase letter';
     if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter';
@@ -62,11 +63,28 @@ export default function SignupForm() {
 
   const handleEmailSignup = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setErrors({}); // Clear previous errors
     
-    // Validate form and show all errors if validation fails
+    // Clear all existing errors first
+    setErrors({});
+    
+    // Step 1: Validate email first
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setErrors({ email: emailError });
+      return;
+    }
+    
+    // Step 2: Validate password length
+    if (password.length > 128 || confirmPassword.length > 128) {
+      const newErrors: ValidationErrors = {};
+      if (password.length > 128) newErrors.password = 'Password was too long';
+      if (confirmPassword.length > 128) newErrors.confirmPassword = 'Password was too long';
+      setErrors(newErrors);
+      return;
+    }
+    
+    // Step 3: Run complete form validation for remaining checks
     if (!validateForm()) {
-      // If validation fails, don't proceed with signup
       return;
     }
 
