@@ -1,7 +1,8 @@
 'use client';
 
+import React from 'react';
 import {
-  User, Bot, FileText, ExternalLink, Image as ImageIcon, Paperclip, Loader2
+  User, Bot, FileText, ExternalLink, Image as ImageIcon, Paperclip, Loader2, RefreshCw, X, AlertCircle
 } from 'lucide-react';
 import { Message } from '@/app/types/chat';
 import { User as SupabaseUser } from '@supabase/supabase-js';
@@ -21,9 +22,11 @@ interface ChatBubbleProps {
   isActiveStream?: boolean;
   streamingContent?: string;
   isEditingMode?: boolean;
+  onRetry?: (messageId: string) => void;
+  onDismiss?: (messageId: string) => void;
 }
 
-export const ChatBubble: React.FC<ChatBubbleProps> = ({
+export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   message,
   user,
   onDocumentClick,
@@ -32,6 +35,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   isActiveStream = false,
   streamingContent = '',
   isEditingMode = false,
+  onRetry,
+  onDismiss,
 }) => {
   const [fileUrls, setFileUrls] = useState<{ [key: string]: string }>({});
   const [loadingFiles, setLoadingFiles] = useState<{ [key: string]: boolean }>({});
@@ -350,6 +355,42 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           </div>
         );
       }
+      // If AI response has no content and no document, treat it as an error
+      if (onRetry) {
+        return (
+          <div className="bg-red-900/20 text-red-100 rounded-2xl rounded-bl-md px-4 py-3 border border-red-500/30 backdrop-blur-sm">
+            <div className="flex items-center space-x-2 mb-2">
+              <AlertCircle className="w-4 h-4 text-red-400" />
+              <div className="text-sm font-medium text-red-400">
+                Failed to generate response
+              </div>
+            </div>
+            <div className="text-sm opacity-90 mb-3">
+              Something went wrong while generating the response.
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => onRetry(message.id)}
+                className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors font-medium"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Retry</span>
+              </button>
+              {onDismiss && (
+                <button
+                  onClick={() => onDismiss(message.id)}
+                  className="flex items-center space-x-1 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-gray-300 text-xs rounded-md transition-colors font-medium"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Dismiss</span>
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      }
+      
+      // Fallback if no retry function available
       return (
         <div className="text-sm opacity-75 italic text-red-300">
           Response generated but no content available.
@@ -380,15 +421,61 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       </div>
     );
   }
-  if (isError) {
+  // Handle different message states
+  if (isError || message.state === 'error') {
+    const errorMessage = message.error?.message || message.content || 'Something went wrong while generating the response.';
+    const retryCount = message.error?.retryCount || 0;
+    const isRetrying = message.state === 'retrying';
+
     return (
       <div className="flex items-start space-x-3">
         <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center">
-          <Bot className="w-4 h-4 text-white" />
+          <AlertCircle className="w-4 h-4 text-white" />
         </div>
-        <div className="bg-red-900/50 text-red-100 rounded-2xl rounded-bl-md px-4 py-3 border border-red-700">
-          <div className="text-sm font-medium">Error</div>
-          <div className="text-sm opacity-90">{message.content}</div>
+        <div className="bg-red-900/20 text-red-100 rounded-2xl rounded-bl-md px-4 py-3 border border-red-500/30 backdrop-blur-sm">
+          <div className="flex items-center space-x-2 mb-2">
+            <AlertCircle className="w-4 h-4 text-red-400" />
+            <div className="text-sm font-medium text-red-400">
+              {isRetrying ? 'Regenerating response...' : 'Failed to generate response'}
+            </div>
+          </div>
+          <div className="text-sm opacity-90 mb-3">
+            {isRetrying ? 'Please wait while we retry your request.' : errorMessage}
+          </div>
+          {retryCount > 0 && !isRetrying && (
+            <div className="text-xs text-red-300 opacity-75 mb-3">
+              Attempt {retryCount + 1} failed
+            </div>
+          )}
+          {!isRetrying && (
+            <div className="flex items-center space-x-2">
+              {onRetry && (
+                <button
+                  onClick={() => onRetry(message.id)}
+                  className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors font-medium"
+                  disabled={isRetrying}
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Retry</span>
+                </button>
+              )}
+              {onDismiss && (
+                <button
+                  onClick={() => onDismiss(message.id)}
+                  className="flex items-center space-x-1 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-gray-300 text-xs rounded-md transition-colors font-medium"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Dismiss</span>
+                </button>
+              )}
+            </div>
+          )}
+          {isRetrying && (
+            <div className="flex items-center space-x-2 text-blue-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Regenerating response...</span>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -467,4 +554,4 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       </div>
     </div>
   );
-};
+});

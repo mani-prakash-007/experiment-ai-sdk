@@ -1,7 +1,7 @@
 'use client';
 
 import { experimental_useObject as useObject } from '@ai-sdk/react';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { z } from 'zod';
 import { ArrowDown } from 'lucide-react';
@@ -87,6 +87,11 @@ export default function Chat() {
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [allAvailableVersions, setAllAvailableVersions] = useState<any[]>([]);
   const [isDocumentVersionsLoading, setIsDocumentVersionsLoading] = useState(false);
+  
+  // Error handling and retry state
+  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
+  // Track messages that have been dismissed by the user (hidden from UI)
+  const [dismissedMessages, setDismissedMessages] = useState<Set<string>>(new Set());
 
   const aiSubmittedSession = useRef<string | null>(null);
   const currentDocumentReference = useRef<DocumentReference | null>(null);
@@ -122,6 +127,15 @@ export default function Chat() {
     }, 100); // Update UI every 100ms
   }, []);
 
+  // Cleanup timeout on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const clearSessionState = () => {
     setStreamingMessageId(null);
     setStreamingContent('');
@@ -129,7 +143,247 @@ export default function Chat() {
     setShouldAutoScroll(false);
     setStreamingDocumentData({ title: '', content: '', extra: undefined });
     setAllAvailableVersions([]);
+    setRetryingMessageId(null);
+    setDismissedMessages(new Set());
   };
+
+
+
+  // Handle AI-related errors
+  const handleAIError = useCallback(async (
+    messageId: string, 
+    error: Error, 
+    retryCount: number = 0
+  ) => {
+    // Prevent handling the same error multiple times
+    if (dismissedMessages.has(messageId)) {
+      return;
+    }
+
+    const errorMessage = error.message || 'Something went wrong while generating the response.';
+    const errorType = error.name?.toLowerCase().includes('timeout') ? 'timeout' :
+                     error.message?.toLowerCase().includes('network') ? 'network' :
+                     error.message?.toLowerCase().includes('server') ? 'server' : 'unknown';
+
+    try {
+      // Update message with error state
+      await updateMessage(messageId, {
+        state: 'error' as const,
+        error: {
+          message: errorMessage,
+          type: errorType as any,
+          retryCount,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (updateError) {
+      console.error('Failed to update message with error state:', updateError);
+    }
+
+    // Clean up retry state
+    setRetryingMessageId(null);
+    setStreamingStarted(false);
+    setStreamingMessageId(null);
+  }, [updateMessage, dismissedMessages]);
+
+  // Submit AI request with error handling
+  const submitAIRequest = useCallback(async (
+    contextToSend: any[],
+    model: ModelOption,
+    messageId: string,
+    originalRequest: { input: string; uploadedFile?: UploadedFile; documentReference?: any }
+  ) => {
+    try {
+      // Store original request data for retry capability
+      await updateMessage(messageId, {
+        originalRequest: {
+          input: originalRequest.input,
+          model: model,
+          uploadedFile: originalRequest.uploadedFile,
+          documentReference: originalRequest.documentReference
+        },
+        state: 'pending' as const
+      });
+
+      aiSubmittedSession.current = activeSessionId;
+      setStreamingStarted(false);
+      submit({ messages: contextToSend, model: model });
+
+    } catch (error) {
+      console.error('Error submitting AI request:', error);
+      await handleAIError(messageId, error as Error);
+    }
+  }, [activeSessionId, submit, updateMessage, handleAIError]);
+
+  // Retry AI submission with the original request data  
+  const retryAISubmission = useCallback(async (
+    input: string,
+    model: ModelOption,
+    uploadedFile?: UploadedFile,
+    documentReference?: any,
+    messageId?: string
+  ) => {
+    if (!activeSessionId) return;
+
+    // Generate presigned URL for file if needed for LLM context
+    let fileForLLM: UploadedFileWithUrl | undefined;
+    if (uploadedFile) {
+      const presignedData = await generatePresignedUrl(uploadedFile.storagePath, 7200);
+      if (presignedData) {
+        fileForLLM = {
+          ...uploadedFile,
+          fileUrl: presignedData.signedUrl,
+          urlExpiresAt: presignedData.expiresAt
+        };
+      }
+    }
+
+    // Fetch document content if document reference is provided
+    let documentContext: any = null;
+    if (documentReference) {
+      try {
+        const docData = await getDocumentByReference(documentReference.documentId, documentReference.version);
+        if (docData) {
+          documentContext = {
+            title: docData.title || 'Untitled Document',
+            content: docData.content || '',
+          };
+        }
+      } catch (error) {
+        console.error('Error fetching referenced document:', error);
+        toast.error('Failed to fetch referenced document');
+      }
+    }
+
+    // Recreate context similar to handleSubmit
+    let contextToSend: any[];
+    if (messages.length === 0) {
+      const initialMessage: any = {
+        role: 'user',
+        content: input,
+        file: fileForLLM ? {
+          ...fileForLLM,
+          urlExpiresAt: fileForLLM.urlExpiresAt || ''
+        } : undefined
+      };
+      
+      if (documentContext) {
+        initialMessage.documentReference = documentContext;
+      }
+      
+      contextToSend = [initialMessage];
+    } else {
+      const messagesWithUrls = await Promise.all(
+        messages.map(async (msg) => {
+          if (msg.file_data) {
+            const presignedData = await generatePresignedUrl(msg.file_data.storagePath, 7200);
+            return {
+              role: msg.role,
+              content: msg.content,
+              file: presignedData ? {
+                ...msg.file_data,
+                fileUrl: presignedData.signedUrl,
+                urlExpiresAt: presignedData.expiresAt
+              } : undefined
+            };
+          }
+          return {
+            role: msg.role,
+            content: msg.content,
+            file: msg.file_data
+          };
+        })
+      );
+      
+      // Add the retry request at the end
+      const retryMessage: any = {
+        role: 'user',
+        content: input,
+        file: fileForLLM ? {
+          ...fileForLLM,
+          urlExpiresAt: fileForLLM.urlExpiresAt || ''
+        } : undefined
+      };
+      
+      if (documentContext) {
+        retryMessage.documentReference = documentContext;
+      }
+      
+      messagesWithUrls.push(retryMessage);
+      
+      contextToSend = messagesWithUrls;
+    }
+
+    await submitAIRequest(contextToSend, model, messageId || '', {
+      input,
+      uploadedFile,
+      documentReference
+    });
+  }, [activeSessionId, messages, generatePresignedUrl, getDocumentByReference, submitAIRequest]);
+
+  // Retry handler for failed AI messages
+  const handleRetry = useCallback(async (messageId: string) => {
+    const message = messages.find(m => m.id === messageId);
+    if (!message || !message.originalRequest) {
+      toast.error('Cannot retry: original request data not found');
+      return;
+    }
+
+    // Safety check: prevent excessive retries
+    const currentRetryCount = message.error?.retryCount || 0;
+    if (currentRetryCount >= 10) {
+      toast.error('Maximum retry attempts reached. Please try refreshing the page.');
+      return;
+    }
+
+    // Prevent multiple concurrent retries on the same message
+    if (retryingMessageId === messageId) {
+      return;
+    }
+
+    const { input, model, uploadedFile, documentReference } = message.originalRequest;
+    const retryCount = currentRetryCount + 1;
+
+    try {
+      // Update message to retrying state
+      await updateMessage(messageId, {
+        state: 'retrying' as const,
+        error: {
+          ...message.error!,
+          retryCount
+        }
+      });
+
+      setRetryingMessageId(messageId);
+
+      // Add a small delay to prevent immediate retry loops
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Recreate the context and retry
+      await retryAISubmission(input, model, uploadedFile, documentReference, messageId);
+
+    } catch (error) {
+      console.error('Retry failed:', error);
+      await handleAIError(messageId, error as Error, retryCount);
+    }
+  }, [messages, updateMessage, handleAIError, retryingMessageId, retryAISubmission]);
+
+  // Dismiss handler for error messages
+  const handleDismiss = useCallback(async (messageId: string) => {
+    // Add to dismissed messages set - this immediately hides the message from UI
+    setDismissedMessages(prev => {
+      const newSet = new Set(prev);
+      newSet.add(messageId);
+      return newSet;
+    });
+
+    // Update the message in database to clear error state and content
+    await updateMessage(messageId, {
+      state: 'success' as const,
+      error: undefined,
+      content: '', // Clear content to ensure it stays hidden
+    });
+  }, [updateMessage]);
 
   // Function to update message document metadata when a document is updated
   // This mirrors the database trigger behavior: change reference_type from 'latest' to 'versioned'
@@ -357,9 +611,13 @@ export default function Chat() {
       
       contextToSend = messagesWithUrls;
     }
-    aiSubmittedSession.current = activeSessionId;
-    setStreamingStarted(false);
-    submit({ messages: contextToSend, model: selectedModel });
+    
+    // Use the new error-handling submit function
+    await submitAIRequest(contextToSend, selectedModel, addedMessage.id, {
+      input,
+      uploadedFile,
+      documentReference
+    });
     setIsEditorOpen(false);
   };
 
@@ -415,6 +673,12 @@ export default function Chat() {
         return;
       }
 
+      // Handle streaming errors
+      if (error && retryingMessageId) {
+        await handleAIError(retryingMessageId, error);
+        return;
+      }
+
       // Start of streaming: create only the message (no document yet)
       if (isLoading && !streamingMessageId && !streamingStarted) {
         setStreamingStarted(true);
@@ -426,6 +690,7 @@ export default function Chat() {
             session_id: activeSessionId,
             role: 'assistant',
             content: '',
+            state: 'pending' as const,
           };
           
           const addedMessage = await addMessage(aiMessage);
@@ -537,10 +802,12 @@ export default function Chat() {
             }
           }
 
+          // Always set success state when streaming completes
+          messageUpdates.state = 'success' as const;
+          messageUpdates.error = undefined; // Clear any previous error state
+
           // Single API call to update message with both content and document metadata
-          if (Object.keys(messageUpdates).length > 0) {
-            await updateMessage(streamingMessageId, messageUpdates);
-          }
+          await updateMessage(streamingMessageId, messageUpdates);
         } catch (error) {
           console.error('Error finalizing document:', error);
         } finally {
@@ -575,19 +842,30 @@ export default function Chat() {
     streamingCompleted,
     addMessage, 
     updateMessage, 
-    createDocument
+    createDocument,
+    error,
+    retryingMessageId,
+    handleAIError
   ]);
 
-  // Handle streaming errors
+  // Handle streaming errors and cleanup
   useEffect(() => {
-    if (error && streamingMessageId) {
+    if (error && (streamingMessageId || retryingMessageId)) {
+      const targetMessageId = streamingMessageId || retryingMessageId;
+      if (targetMessageId && !dismissedMessages.has(targetMessageId)) {
+        // Prevent duplicate error handling
+        handleAIError(targetMessageId, error);
+      }
+      
+      // Cleanup streaming state
       setStreamingMessageId(null);
       setStreamingStarted(false);
       setStreamingDocumentData(null);
       setStreamingCompleted(false);
+      setRetryingMessageId(null);
       aiSubmittedSession.current = null;
     }
-  }, [error, streamingMessageId]);
+  }, [error, streamingMessageId, retryingMessageId, handleAIError, dismissedMessages]);
 
   // // Update message files when a new file is uploaded
   useEffect(() => {
@@ -601,19 +879,21 @@ export default function Chat() {
 
   // Get messages with documents for document reference dropdown (deduplicated by doc_id)
   // This ensures each document appears only once, showing the latest version
-  const messagesWithDocuments = messages
-    .filter(msg => msg.document && msg.role === 'assistant')
-    .reduce((unique, message) => {
-      // Only keep the latest message for each doc_id
-      const existingIndex = unique.findIndex(m => m.document?.doc_id === message.document?.doc_id);
-      if (existingIndex === -1) {
-        unique.push(message);
-      } else {
-        // Replace with newer message (messages are ordered chronologically)
-        unique[existingIndex] = message;
-      }
-      return unique;
-    }, [] as Message[]);
+  const messagesWithDocuments = useMemo(() => {
+    return messages
+      .filter(msg => msg.document && msg.role === 'assistant')
+      .reduce((unique, message) => {
+        // Only keep the latest message for each doc_id
+        const existingIndex = unique.findIndex(m => m.document?.doc_id === message.document?.doc_id);
+        if (existingIndex === -1) {
+          unique.push(message);
+        } else {
+          // Replace with newer message (messages are ordered chronologically)
+          unique[existingIndex] = message;
+        }
+        return unique;
+      }, [] as Message[]);
+  }, [messages]);
 
   if (authLoading) {
     return (
@@ -656,7 +936,15 @@ export default function Chat() {
                       </button>
                     </div>
                   )}
-                  {messages.map((message) => (
+                  {messages
+                    .filter(message => {
+                      // Hide dismissed messages
+                      if (dismissedMessages.has(message.id)) {
+                        return false;
+                      }
+                      return true;
+                    })
+                    .map((message) => (
                     <div key={message.id} className="mx-auto max-w-[820px] w-full">
                       <ChatBubble
                         key={message.id}
@@ -667,25 +955,12 @@ export default function Chat() {
                         isActiveStream={streamingMessageId === message.id}
                         streamingContent={streamingMessageId === message.id ? streamingContent : ''}
                         isEditingMode={isEditingMode && streamingMessageId === message.id}
+                        onRetry={handleRetry}
+                        onDismiss={handleDismiss}
                       />
                     </div>
                   ))}
-                  {error && (
-                    <div className="mx-auto max-w-[720px] w-full">
-                      <ChatBubble
-                        message={{
-                          id: 'error',
-                          role: 'assistant',
-                          content: error.message,
-                          session_id: activeSessionId || '',
-                          created_at: new Date().toISOString(),
-                        } as Message}
-                        user={user}
-                        onDocumentClick={openDocument}
-                        isError={true}
-                      />
-                    </div>
-                  )}
+
                   <div ref={messagesEndRef} />
                 </div>
               </div>
