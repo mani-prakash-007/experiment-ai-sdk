@@ -363,8 +363,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
           </div>
         );
       }
-      // If AI response has no content and no document, show a simple error message
-      if (onRetry) {
+      // If AI response has no content and no document, show a simple error message only if there's actually an error
+      if (message.ai_state === 'error' && onRetry) {
         return (
           <div className="text-sm opacity-75 italic text-red-300 flex items-center space-x-2">
             <AlertCircle className="w-4 h-4" />
@@ -379,7 +379,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
         );
       }
       
-      // Fallback if no retry function available
+      // Fallback for other cases - show loading state if not error
+      if (message.ai_state !== 'error') {
+        return renderGeneratingLoading('Generating response');
+      }
+      
+      // Final fallback for error state without retry function
       return (
         <div className="text-sm opacity-75 italic text-red-300">
           Response generated but no content available.

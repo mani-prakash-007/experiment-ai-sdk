@@ -107,6 +107,7 @@ export default function Chat() {
     updateMessage,
   } = useChatMessages({ sessionId: activeSessionId });
 
+  console.log(messages)
   const containerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -982,13 +983,6 @@ export default function Chat() {
                     </div>
                   )}
                   {messages
-                    .filter(message => {
-                      // Hide dismissed messages (messages with empty content and success state)
-                      if (message.ai_state === 'success' && !message.content.trim()) {
-                        return false;
-                      }
-                      return true;
-                    })
                     .map((message) => (
                     <div key={message.id} className="mx-auto max-w-[820px] w-full">
                       <ChatBubble
