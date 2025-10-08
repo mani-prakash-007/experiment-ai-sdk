@@ -74,7 +74,6 @@ export interface FloatingDockProps {
   documentReference?: DocumentReference;
   onDocumentReference?: (doc: DocumentReference) => void;
   onDocumentReferenceRemove?: () => void;
-  messagesWithDocuments: Message[];
   allAvailableVersions?: any[];
   onFetchDocumentVersions?: () => Promise<any[]>;
   isDocumentVersionsLoading?: boolean;

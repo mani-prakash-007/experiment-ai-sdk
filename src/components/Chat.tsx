@@ -939,23 +939,6 @@ export default function Chat() {
     }
   }, [messages]);
 
-  // Get messages with documents for document reference dropdown (deduplicated by doc_id)
-  // This ensures each document appears only once, showing the latest version
-  const messagesWithDocuments = useMemo(() => {
-    return messages
-      .filter(msg => msg.document && msg.role === 'assistant')
-      .reduce((unique, message) => {
-        // Only keep the latest message for each doc_id
-        const existingIndex = unique.findIndex(m => m.document?.doc_id === message.document?.doc_id);
-        if (existingIndex === -1) {
-          unique.push(message);
-        } else {
-          // Replace with newer message (messages are ordered chronologically)
-          unique[existingIndex] = message;
-        }
-        return unique;
-      }, [] as Message[]);
-  }, [messages]);
 
   if (authLoading) {
     return (
@@ -1069,7 +1052,6 @@ export default function Chat() {
                     documentReference={documentReference}
                     onDocumentReference={handleDocumentReference}
                     onDocumentReferenceRemove={handleDocumentReferenceRemove}
-                    messagesWithDocuments={messagesWithDocuments}
                     allAvailableVersions={allAvailableVersions}
                     onFetchDocumentVersions={fetchDocumentVersionsOnDemand}
                     isDocumentVersionsLoading={isDocumentVersionsLoading}
@@ -1098,7 +1080,6 @@ export default function Chat() {
               onSave={updateDocument}
               onClose={closeEditor}
               isStreaming={isLoading && streamingMessageId !== null}
-              
             />
           )}
         </div>

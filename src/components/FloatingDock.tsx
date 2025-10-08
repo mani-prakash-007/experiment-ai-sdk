@@ -107,7 +107,6 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   documentReference,
   onDocumentReference,
   onDocumentReferenceRemove,
-  messagesWithDocuments,
   allAvailableVersions = [],
   onFetchDocumentVersions,
   isDocumentVersionsLoading = false
@@ -363,7 +362,6 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
               onClick={handleFileRemove}
               className="absolute right-1 top-1 transition-opacity p-1 hover:bg-slate-700 rounded cursor-pointer"
             >
-              <Loader2 className="w-3 h-3 text-slate-400 animate-spin"/> :
               <X className="w-3 h-3 text-slate-400" />
             </button>
           </div>
