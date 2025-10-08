@@ -13,6 +13,7 @@ import { useDocuments } from '@/app/hooks/useDocument';
 import { Message, ModelOption, UploadedFile, UploadedFileWithUrl, DocumentReference, DocumentMetadata } from '@/app/types/chat';
 import { generatePresignedUrl } from '@/utils/presignedUrls';
 import { toast } from 'sonner';
+import { withRetry, getErrorMessage, isNetworkError } from '@/utils/errorHandling';
 import { useParams } from 'next/navigation';
 import { ChatBubble } from '@/components/ChatBubble';
 import { WelcomeScreen } from '@/components/WelcomeScreen';
@@ -88,10 +89,11 @@ export default function Chat() {
   const [allAvailableVersions, setAllAvailableVersions] = useState<any[]>([]);
   const [isDocumentVersionsLoading, setIsDocumentVersionsLoading] = useState(false);
   
-  // Error handling and retry state
+  // Minimal error/retry state
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
-  // Track messages that have been dismissed by the user (hidden from UI)
-  const [dismissedMessages, setDismissedMessages] = useState<Set<string>>(new Set());
+  
+  // Timeout for detecting silent failures
+  const streamingTimeoutIdRef = useRef<NodeJS.Timeout | null>(null);
 
   const aiSubmittedSession = useRef<string | null>(null);
   const currentDocumentReference = useRef<DocumentReference | null>(null);
@@ -121,10 +123,10 @@ export default function Chat() {
       clearTimeout(streamingTimeoutRef.current);
     }
     
-    // Throttle state updates to avoid excessive re-renders
+    // Throttle state updates to avoid excessive re-renders but be more responsive
     streamingTimeoutRef.current = setTimeout(() => {
       setStreamingContent(streamingContentRef.current);
-    }, 100); // Update UI every 100ms
+    }, 50); // Update UI every 50ms for better responsiveness
   }, []);
 
   // Cleanup timeout on unmount to prevent memory leaks
@@ -144,245 +146,232 @@ export default function Chat() {
     setStreamingDocumentData({ title: '', content: '', extra: undefined });
     setAllAvailableVersions([]);
     setRetryingMessageId(null);
-    setDismissedMessages(new Set());
+    
+    // Clear any active timeouts
+    if (streamingTimeoutIdRef.current) {
+      clearTimeout(streamingTimeoutIdRef.current);
+      streamingTimeoutIdRef.current = null;
+    }
   };
 
-
-
-  // Handle AI-related errors
-  const handleAIError = useCallback(async (
-    messageId: string, 
-    error: Error, 
-    retryCount: number = 0
-  ) => {
-    // Prevent handling the same error multiple times
-    if (dismissedMessages.has(messageId)) {
-      return;
+  // Enhanced error handler with better error messages
+  const handleAIError = useCallback(async (messageId: string, error: Error) => {
+    let errorMessage = getErrorMessage(error);
+    
+    // Provide more user-friendly error messages
+    if (error.message.includes('API key') || error.message.includes('401') || error.message.includes('Unauthorized')) {
+      errorMessage = 'Invalid API key. Please check your API configuration in the settings.';
+    } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
+      errorMessage = 'Access forbidden. Please check your API key permissions.';
+    } else if (isNetworkError(error)) {
+      errorMessage = 'Network connection failed. Please check your internet connection and try again.';
+    } else if (error.message.includes('timeout')) {
+      errorMessage = 'Request timed out. The AI service may be experiencing high load.';
+    } else if (error.message.includes('rate limit') || error.message.includes('429')) {
+      errorMessage = 'Too many requests. Please wait a moment before trying again.';
+    } else if (error.message.includes('500') || error.message.includes('Internal server error')) {
+      errorMessage = 'AI service is temporarily unavailable. Please try again in a few moments.';
+    } else if (!errorMessage || errorMessage === 'AI request failed') {
+      errorMessage = 'Something went wrong while generating the response. Please try again.';
     }
-
-    const errorMessage = error.message || 'Something went wrong while generating the response.';
-    const errorType = error.name?.toLowerCase().includes('timeout') ? 'timeout' :
-                     error.message?.toLowerCase().includes('network') ? 'network' :
-                     error.message?.toLowerCase().includes('server') ? 'server' : 'unknown';
 
     try {
-      // Update message with error state
+      const currentMessage = messages.find(m => m.id === messageId);
+      const retryCount = (currentMessage?.ai_retry_count || 0) + 1;
+      
       await updateMessage(messageId, {
-        state: 'error' as const,
-        error: {
-          message: errorMessage,
-          type: errorType as any,
-          retryCount,
-          timestamp: new Date().toISOString()
-        }
-      });
-    } catch (updateError) {
-      console.error('Failed to update message with error state:', updateError);
+        ai_state: 'error',
+        ai_error_message: errorMessage,
+        ai_retry_count: retryCount
+      } as any);
+    } catch (err) {
+      console.error('Failed to mark message error:', err);
     }
 
-    // Clean up retry state
+    // Reset streaming states
     setRetryingMessageId(null);
     setStreamingStarted(false);
     setStreamingMessageId(null);
-  }, [updateMessage, dismissedMessages]);
+    
+    // Clear any active timeouts
+    if (streamingTimeoutIdRef.current) {
+      clearTimeout(streamingTimeoutIdRef.current);
+      streamingTimeoutIdRef.current = null;
+    }
+  }, [updateMessage, messages]);
 
-  // Submit AI request with error handling
+  // AI request submission with network retry
   const submitAIRequest = useCallback(async (
     contextToSend: any[],
     model: ModelOption,
-    messageId: string,
+    userMessageId: string,
     originalRequest: { input: string; uploadedFile?: UploadedFile; documentReference?: any }
   ) => {
     try {
-      // Store original request data for retry capability
-      await updateMessage(messageId, {
-        originalRequest: {
-          input: originalRequest.input,
-          model: model,
-          uploadedFile: originalRequest.uploadedFile,
-          documentReference: originalRequest.documentReference
+      // Store original request temporarily - will move to assistant message when created
+      // Make a deep copy of the context to store exactly what we're sending to AI
+      const contextCopy = JSON.parse(JSON.stringify(contextToSend));
+      
+      const originalRequestData = {
+        input: originalRequest.input,
+        model: {
+          id: model.id,
+          name: model.name,
+          provider: model.provider
         },
-        state: 'pending' as const
-      });
+        uploadedFile: originalRequest.uploadedFile ? { storagePath: originalRequest.uploadedFile.storagePath } : undefined,
+        documentReference: originalRequest.documentReference ? { 
+          documentId: originalRequest.documentReference.documentId, 
+          version: originalRequest.documentReference.version 
+        } : undefined,
+        fullContext: contextCopy // Store the complete conversation context
+      };
 
+      // Store the original request data to move to assistant message later
       aiSubmittedSession.current = activeSessionId;
       setStreamingStarted(false);
+      
+      // Submit the request (the AI SDK handles its own retries)
       submit({ messages: contextToSend, model: model });
-
-    } catch (error) {
-      console.error('Error submitting AI request:', error);
-      await handleAIError(messageId, error as Error);
+    } catch (err) {
+      console.error('Error submitting AI request:', err);
+      await handleAIError(userMessageId, err as Error);
     }
-  }, [activeSessionId, submit, updateMessage, handleAIError]);
+  }, [activeSessionId, submit, handleAIError]);
 
-  // Retry AI submission with the original request data  
-  const retryAISubmission = useCallback(async (
-    input: string,
-    model: ModelOption,
-    uploadedFile?: UploadedFile,
-    documentReference?: any,
-    messageId?: string
-  ) => {
-    if (!activeSessionId) return;
-
-    // Generate presigned URL for file if needed for LLM context
-    let fileForLLM: UploadedFileWithUrl | undefined;
-    if (uploadedFile) {
-      const presignedData = await generatePresignedUrl(uploadedFile.storagePath, 7200);
-      if (presignedData) {
-        fileForLLM = {
-          ...uploadedFile,
-          fileUrl: presignedData.signedUrl,
-          urlExpiresAt: presignedData.expiresAt
-        };
-      }
-    }
-
-    // Fetch document content if document reference is provided
-    let documentContext: any = null;
-    if (documentReference) {
-      try {
-        const docData = await getDocumentByReference(documentReference.documentId, documentReference.version);
-        if (docData) {
-          documentContext = {
-            title: docData.title || 'Untitled Document',
-            content: docData.content || '',
-          };
-        }
-      } catch (error) {
-        console.error('Error fetching referenced document:', error);
-        toast.error('Failed to fetch referenced document');
-      }
-    }
-
-    // Recreate context similar to handleSubmit
-    let contextToSend: any[];
-    if (messages.length === 0) {
-      const initialMessage: any = {
-        role: 'user',
-        content: input,
-        file: fileForLLM ? {
-          ...fileForLLM,
-          urlExpiresAt: fileForLLM.urlExpiresAt || ''
-        } : undefined
-      };
-      
-      if (documentContext) {
-        initialMessage.documentReference = documentContext;
-      }
-      
-      contextToSend = [initialMessage];
-    } else {
-      const messagesWithUrls = await Promise.all(
-        messages.map(async (msg) => {
-          if (msg.file_data) {
-            const presignedData = await generatePresignedUrl(msg.file_data.storagePath, 7200);
-            return {
-              role: msg.role,
-              content: msg.content,
-              file: presignedData ? {
-                ...msg.file_data,
-                fileUrl: presignedData.signedUrl,
-                urlExpiresAt: presignedData.expiresAt
-              } : undefined
-            };
-          }
-          return {
-            role: msg.role,
-            content: msg.content,
-            file: msg.file_data
-          };
-        })
-      );
-      
-      // Add the retry request at the end
-      const retryMessage: any = {
-        role: 'user',
-        content: input,
-        file: fileForLLM ? {
-          ...fileForLLM,
-          urlExpiresAt: fileForLLM.urlExpiresAt || ''
-        } : undefined
-      };
-      
-      if (documentContext) {
-        retryMessage.documentReference = documentContext;
-      }
-      
-      messagesWithUrls.push(retryMessage);
-      
-      contextToSend = messagesWithUrls;
-    }
-
-    await submitAIRequest(contextToSend, model, messageId || '', {
-      input,
-      uploadedFile,
-      documentReference
-    });
-  }, [activeSessionId, messages, generatePresignedUrl, getDocumentByReference, submitAIRequest]);
-
-  // Retry handler for failed AI messages
-  const handleRetry = useCallback(async (messageId: string) => {
-    const message = messages.find(m => m.id === messageId);
-    if (!message || !message.originalRequest) {
+  // Simplified retry function
+  const retryAISubmission = useCallback(async (messageId?: string) => {
+    if (!activeSessionId || !messageId) return;
+    
+    const assistantMessage = messages.find(m => m.id === messageId);
+    if (!assistantMessage?.ai_original_request) {
       toast.error('Cannot retry: original request data not found');
       return;
     }
 
-    // Safety check: prevent excessive retries
-    const currentRetryCount = message.error?.retryCount || 0;
-    if (currentRetryCount >= 10) {
-      toast.error('Maximum retry attempts reached. Please try refreshing the page.');
-      return;
-    }
+    const orig = assistantMessage.ai_original_request;
+    const modelOption: ModelOption = {
+      id: orig.model.id,
+      name: orig.model.name,
+      provider: orig.model.provider
+    };
 
-    // Prevent multiple concurrent retries on the same message
-    if (retryingMessageId === messageId) {
-      return;
-    }
-
-    const { input, model, uploadedFile, documentReference } = message.originalRequest;
-    const retryCount = currentRetryCount + 1;
-
-    try {
-      // Update message to retrying state
-      await updateMessage(messageId, {
-        state: 'retrying' as const,
-        error: {
-          ...message.error!,
-          retryCount
+    // Use the stored full context for exact retry
+    let contextToSend: any[] = [];
+    
+    if (orig.fullContext) {
+      // Use the exact same context that was sent originally
+      contextToSend = JSON.parse(JSON.stringify(orig.fullContext));
+      
+      // Regenerate presigned URLs for any files in the context (they may have expired)
+      for (const message of contextToSend) {
+        if (message.file?.storagePath) {
+          try {
+            const presignedData = await generatePresignedUrl(message.file.storagePath, 7200);
+            if (presignedData) {
+              message.file.fileUrl = presignedData.signedUrl;
+              message.file.urlExpiresAt = presignedData.expiresAt;
+            }
+          } catch (err) {
+            console.error('Failed to regenerate file URL for retry:', err);
+            // Remove file if we can't regenerate URL
+            delete message.file;
+          }
         }
-      });
+      }
+      
+      // Refresh document references if they exist (in case document was updated)
+      for (const message of contextToSend) {
+        if (message.documentReference && typeof message.documentReference === 'object' && 'doc_id' in message.documentReference) {
+          // This is already the processed document content, keep as is for retry
+          // Document references are static content for the retry
+        }
+      }
+    } else {
+      // Fallback for old messages without fullContext - reconstruct as before
+      contextToSend = [{ role: 'user', content: orig.input }];
 
-      setRetryingMessageId(messageId);
+      // Handle file if present
+      if (orig.uploadedFile?.storagePath) {
+        try {
+          const presignedData = await generatePresignedUrl(orig.uploadedFile.storagePath, 7200);
+          if (presignedData) {
+            (contextToSend[0] as any).file = { 
+              storagePath: orig.uploadedFile.storagePath, 
+              fileUrl: presignedData.signedUrl, 
+              urlExpiresAt: presignedData.expiresAt 
+            };
+          }
+        } catch (err) {
+          console.error('Failed to generate file URL for retry:', err);
+        }
+      }
 
-      // Add a small delay to prevent immediate retry loops
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Recreate the context and retry
-      await retryAISubmission(input, model, uploadedFile, documentReference, messageId);
-
-    } catch (error) {
-      console.error('Retry failed:', error);
-      await handleAIError(messageId, error as Error, retryCount);
+      // Handle document reference if present
+      if (orig.documentReference?.documentId) {
+        try {
+          const referenceType = orig.documentReference.version ? 'versioned' : 'latest';
+          const doc = await getDocumentByReference(
+            orig.documentReference.documentId, 
+            referenceType,
+            orig.documentReference.version
+          );
+          if (doc) (contextToSend[0] as any).documentReference = doc;
+        } catch (err) {
+          console.error('Failed to fetch document for retry:', err);
+        }
+      }
     }
-  }, [messages, updateMessage, handleAIError, retryingMessageId, retryAISubmission]);
 
-  // Dismiss handler for error messages
+    // For retry, set editing mode if there's a document reference
+    // The document logic will be handled by checking the message's ai_original_request
+    if (orig.documentReference?.documentId) {
+      setIsEditingMode(true);
+    } else {
+      setIsEditingMode(false);
+    }
+
+    // Set the streaming message ID to the existing assistant message for retry
+    setStreamingMessageId(messageId);
+    aiSubmittedSession.current = activeSessionId;
+    setStreamingStarted(false);
+    setStreamingCompleted(false);
+    setStreamingContent('');
+    streamingContentRef.current = '';
+    
+    // Submit the retry request
+    submit({ messages: contextToSend, model: modelOption });
+  }, [activeSessionId, messages, generatePresignedUrl, getDocumentByReference, submitAIRequest]);
+
+  // Simple retry handler
+  const handleRetry = useCallback(async (assistantMessageId: string) => {
+    if (retryingMessageId === assistantMessageId) return; // Prevent concurrent retries
+    
+    setRetryingMessageId(assistantMessageId);
+    try {
+      // Clear error state before retry and mark as pending
+      await updateMessage(assistantMessageId, { 
+        ai_state: 'pending', 
+        ai_error_message: null,
+        content: '' // Clear any previous error content
+      } as any);
+      
+      await retryAISubmission(assistantMessageId);
+    } catch (err) {
+      console.error('Retry failed:', err);
+      await handleAIError(assistantMessageId, err as Error);
+    } finally {
+      setRetryingMessageId(null);
+    }
+  }, [retryingMessageId, retryAISubmission, handleAIError, updateMessage]);
+
+  // Simple dismiss handler - just clear error state
   const handleDismiss = useCallback(async (messageId: string) => {
-    // Add to dismissed messages set - this immediately hides the message from UI
-    setDismissedMessages(prev => {
-      const newSet = new Set(prev);
-      newSet.add(messageId);
-      return newSet;
-    });
-
-    // Update the message in database to clear error state and content
     await updateMessage(messageId, {
-      state: 'success' as const,
-      error: undefined,
-      content: '', // Clear content to ensure it stays hidden
-    });
+      ai_state: 'success',
+      ai_error_message: null,
+      content: '', // Clear content to hide the message
+    } as any);
   }, [updateMessage]);
 
   // Function to update message document metadata when a document is updated
@@ -612,6 +601,40 @@ export default function Chat() {
       contextToSend = messagesWithUrls;
     }
     
+    // Create assistant message immediately for instant visual feedback
+    const aiMessage: Omit<Message, 'id' | 'created_at'> = {
+      session_id: activeSessionId,
+      role: 'assistant',
+      content: '', // Will be populated with streaming content
+      ai_state: 'pending',
+    };
+    
+    const assistantMessage = await addMessage(aiMessage);
+    if (assistantMessage) {
+      setStreamingMessageId(assistantMessage.id);
+      setShouldAutoScroll(true);
+      
+      // Store original request data on assistant message for retry functionality
+      const originalRequestData = {
+        input,
+        model: {
+          id: selectedModel.id,
+          name: selectedModel.name,
+          provider: selectedModel.provider
+        },
+        uploadedFile: uploadedFile ? { storagePath: uploadedFile.storagePath } : undefined,
+        documentReference: documentReference ? { 
+          documentId: documentReference.documentId, 
+          version: documentReference.version 
+        } : undefined,
+        fullContext: JSON.parse(JSON.stringify(contextToSend)) // Store complete context
+      };
+      
+      await updateMessage(assistantMessage.id, {
+        ai_original_request: originalRequestData
+      } as any);
+    }
+    
     // Use the new error-handling submit function
     await submitAIRequest(contextToSend, selectedModel, addedMessage.id, {
       input,
@@ -673,47 +696,60 @@ export default function Chat() {
         return;
       }
 
-      // Handle streaming errors
-      if (error && retryingMessageId) {
-        await handleAIError(retryingMessageId, error);
+      // Handle streaming errors - check for both retrying and streaming messages
+      if (error && (retryingMessageId || streamingMessageId)) {
+        const targetMessageId = retryingMessageId || streamingMessageId;
+        if (targetMessageId) {
+          await handleAIError(targetMessageId, error);
+        }
         return;
       }
 
-      // Start of streaming: create only the message (no document yet)
-      if (isLoading && !streamingMessageId && !streamingStarted) {
+      // Start of streaming: use existing message (already created) or handle retry
+      if (isLoading && !streamingStarted) {
         setStreamingStarted(true);
         setStreamingCompleted(false);
         setShouldAutoScroll(true);
         
         try {
-          const aiMessage: Omit<Message, 'id' | 'created_at'> = {
-            session_id: activeSessionId,
-            role: 'assistant',
-            content: '',
-            state: 'pending' as const,
-          };
-          
-          const addedMessage = await addMessage(aiMessage);
-          if (addedMessage) {
-            setStreamingMessageId(addedMessage.id);
+          // For new messages, streamingMessageId should already be set from handleSubmit
+          // For retries, streamingMessageId is set in retryAISubmission
+          if (streamingMessageId) {
+            // For retries, just ensure the message is in pending state (original request data is already stored)
+            const currentMessage = messages.find(m => m.id === streamingMessageId);
+            if (currentMessage && retryingMessageId) {
+              await updateMessage(streamingMessageId, {
+                ai_state: 'pending',
+                content: '' // Clear previous content for retry
+              } as any);
+            }
+            
+            // Set initial streaming content to show immediate loading
+            setStreamingContent('');
+            streamingContentRef.current = '';
+            
+            // Set timeout to detect silent failures (e.g., API key errors)
+            streamingTimeoutIdRef.current = setTimeout(() => {
+              if (!streamingContentRef.current || streamingContentRef.current.trim() === '') {
+                handleAIError(streamingMessageId, new Error('Request timed out - no response received'));
+              }
+            }, 30000); // 30 second timeout
           }
         } catch (error) {
-          console.error('Error creating streaming message:', error);
+          console.error('Error setting up streaming message:', error);
           setStreamingStarted(false);
         }
         return;
       }
       
-      // During streaming: only accumulate content locally (no API calls)
+      // During streaming: immediately update content and show progress
       if (streamingMessageId && isLoading && (object?.general || object?.document || object?.title)) {
         const currentContent = object?.general || '';
         const currentDocumentContent = object?.document || '';
         const currentTitle = object?.title || '';
         
-        // Update local streaming content for immediate UI feedback (throttled)
-        if (currentContent) {
-          updateStreamingContentThrottled(currentContent);
-        }
+        // Always update streaming content immediately for responsive UI
+        updateStreamingContentThrottled(currentContent);
         
         // Accumulate document data (don't save to DB yet)
         if (currentDocumentContent || currentTitle) {
@@ -737,33 +773,43 @@ export default function Chat() {
           const finalContent = streamingContentRef.current || object?.general || '';
           const messageUpdates: any = {};
           
-          if (finalContent) {
-            messageUpdates.content = finalContent;
-          }
+          // Check if we have any actual content or document data
+          const hasActualContent = finalContent && finalContent.trim();
+          const hasDocumentData = streamingDocumentData?.content?.trim() || streamingDocumentData?.title?.trim();
+          
+          // If no content and no document data, this might be an error condition
+          if (!hasActualContent && !hasDocumentData) {
+            // Mark as error - likely an API key issue or other failure
+            messageUpdates.ai_state = 'error';
+            messageUpdates.ai_error_message = 'Failed to generate response. Please check your API configuration.';
+            messageUpdates.content = '';
+          } else {
+            if (finalContent) {
+              messageUpdates.content = finalContent;
+            }
 
-          // Create or edit document based on context
+            // Create or edit document based on context
           const hasContent = streamingDocumentData?.content?.trim();
           const hasTitle = streamingDocumentData?.title?.trim();
           const shouldProcessDocument = hasContent || hasTitle;
           
           if (shouldProcessDocument && streamingDocumentData) {
-            // Check if we're editing an existing document (from document reference)
-            const isEditingExistingDocument = currentDocumentReference.current?.documentId;
+            // Simple logic: Check if this message has a document reference in original request
+            const currentMessage = messages.find(m => m.id === streamingMessageId);
+            const referencedDocumentId = currentMessage?.ai_original_request?.documentReference?.documentId;
             
-            if (isEditingExistingDocument && currentDocumentReference.current) {
-              // Edit the existing document using saveDocument (handles versioning)
-              const updatedDocument = await saveDocument(currentDocumentReference.current.documentId, {
+            if (referencedDocumentId) {
+              // This is an edit operation - update the referenced document
+              const updatedDocument = await saveDocument(referencedDocumentId, {
                 title: streamingDocumentData.title || 'Untitled Document',
                 content: streamingDocumentData.content || '',
                 extra: streamingDocumentData.extra,
               });
               
-              // Update message metadata to reflect the document update
               if (updatedDocument) {
-                updateMessagesDocumentMetadata(currentDocumentReference.current.documentId, updatedDocument.version_number);
-              }
-              
-              if (updatedDocument) {
+                // Update message metadata to reflect the document update
+                updateMessagesDocumentMetadata(referencedDocumentId, updatedDocument.version_number);
+                
                 // Add document metadata to the message update
                 messageUpdates.document = {
                   doc_id: updatedDocument.id,
@@ -778,7 +824,7 @@ export default function Chat() {
                 setIsEditorOpen(true);
               }
             } else {
-              // Create a new document
+              // No document reference - create a new document
               const newDocument = await createDocument({
                 title: streamingDocumentData.title || 'Untitled Document',
                 content: streamingDocumentData.content || '',
@@ -802,9 +848,12 @@ export default function Chat() {
             }
           }
 
-          // Always set success state when streaming completes
-          messageUpdates.state = 'success' as const;
-          messageUpdates.error = undefined; // Clear any previous error state
+            // Set success state when streaming completes (only if not already set to error)
+            if (!messageUpdates.ai_state) {
+              messageUpdates.ai_state = 'success';
+              messageUpdates.ai_error_message = null;
+            }
+          }
 
           // Single API call to update message with both content and document metadata
           await updateMessage(streamingMessageId, messageUpdates);
@@ -821,6 +870,10 @@ export default function Chat() {
           if (streamingTimeoutRef.current) {
             clearTimeout(streamingTimeoutRef.current);
             streamingTimeoutRef.current = null;
+          }
+          if (streamingTimeoutIdRef.current) {
+            clearTimeout(streamingTimeoutIdRef.current);
+            streamingTimeoutIdRef.current = null;
           }
           aiSubmittedSession.current = null;
           setIsEditingMode(false);
@@ -852,8 +905,7 @@ export default function Chat() {
   useEffect(() => {
     if (error && (streamingMessageId || retryingMessageId)) {
       const targetMessageId = streamingMessageId || retryingMessageId;
-      if (targetMessageId && !dismissedMessages.has(targetMessageId)) {
-        // Prevent duplicate error handling
+      if (targetMessageId) {
         handleAIError(targetMessageId, error);
       }
       
@@ -865,7 +917,7 @@ export default function Chat() {
       setRetryingMessageId(null);
       aiSubmittedSession.current = null;
     }
-  }, [error, streamingMessageId, retryingMessageId, handleAIError, dismissedMessages]);
+  }, [error, streamingMessageId, retryingMessageId, handleAIError]);
 
   // // Update message files when a new file is uploaded
   useEffect(() => {
@@ -938,8 +990,8 @@ export default function Chat() {
                   )}
                   {messages
                     .filter(message => {
-                      // Hide dismissed messages
-                      if (dismissedMessages.has(message.id)) {
+                      // Hide dismissed messages (messages with empty content and success state)
+                      if (message.ai_state === 'success' && !message.content.trim()) {
                         return false;
                       }
                       return true;
@@ -954,7 +1006,25 @@ export default function Chat() {
                         isStreaming={!!isLoading}
                         isActiveStream={streamingMessageId === message.id}
                         streamingContent={streamingMessageId === message.id ? streamingContent : ''}
-                        isEditingMode={isEditingMode && streamingMessageId === message.id}
+                        isEditingMode={(() => {
+                          // Check if this assistant message has a document reference in its original request
+                          if (message.ai_original_request?.documentReference?.documentId) {
+                            return true;
+                          }
+                          
+                          // Fallback: Check if the preceding user message has a document reference
+                          if (message.role === 'assistant') {
+                            const messageIndex = messages.findIndex(m => m.id === message.id);
+                            if (messageIndex > 0) {
+                              const prevMessage = messages[messageIndex - 1];
+                              if (prevMessage.role === 'user' && prevMessage.document?.doc_id) {
+                                return true;
+                              }
+                            }
+                          }
+                          
+                          return false;
+                        })()}
                         onRetry={handleRetry}
                         onDismiss={handleDismiss}
                       />

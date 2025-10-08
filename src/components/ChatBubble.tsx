@@ -209,15 +209,15 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     </div>
   );
 
-  const renderGeneratingLoading = () => (
+  const renderGeneratingLoading = (loadingText: string = 'Generating') => (
     <div className="text-sm">
       <div className="flex items-center">
-      <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '0ms' }}></div>
-      <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '150ms' }}></div>
-      <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce mr-2" style={{ animationDelay: '300ms' }}></div>
-      <span className="animate-pulse bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 text-transparent bg-clip-text">
-        Generating
-      </span>
+        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '0ms' }}></div>
+        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '150ms' }}></div>
+        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce mr-2" style={{ animationDelay: '300ms' }}></div>
+        <span className="animate-pulse bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 text-transparent bg-clip-text">
+          {loadingText}
+        </span>
       </div>
     </div>
   );
@@ -303,13 +303,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   const renderMessageContent = () => {
     const isAssistant = message.role === 'assistant';
     // Use streaming content if actively streaming, otherwise use message content
-    const displayContent = (isActiveStream && streamingContent) ? streamingContent : message.content;
+    const displayContent = (isActiveStream && streamingContent !== undefined) ? streamingContent : message.content;
     const hasContent = typeof displayContent === 'string' && displayContent.trim().length > 0;
     const hasDocument = !!(message.document);
 
-    // 1. If actively streaming this bubble, show loading or stream content
+    // 1. If actively streaming this bubble, show immediate feedback
     if (isStreaming && isActiveStream) {
       if (hasContent) {
+        // Show streaming content as it comes in
         return (
           <div>
             {isAssistant ? (
@@ -319,24 +320,31 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
             ) : (
               displayContent
             )}
-            {!hasDocument && (
-              <div className="mt-2 text-xs text-blue-300 opacity-75 animate-pulse">
-                <div className="flex items-center">
-                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-2" style={{ animationDelay: '300ms' }}></div>
-                  {isEditingMode ? 'Editing document...' : 'Preparing document...'}
-                </div>
+            {/* Show document creation/editing status while streaming content */}
+            <div className="mt-2 text-xs text-blue-300 opacity-75 animate-pulse">
+              <div className="flex items-center">
+                <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-1" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce mr-2" style={{ animationDelay: '300ms' }}></div>
+                {isEditingMode ? 'Editing document...' : 'Preparing document...'}
               </div>
-            )}
+            </div>
           </div>
         );
       } else {
-        return renderGeneratingLoading();
+        // No content yet, but actively streaming - show appropriate loading state
+        const loadingText = isEditingMode ? 'Editing document' : 'Generating response';
+        return renderGeneratingLoading(loadingText);
       }
     }
 
-    // 2. Assistant message logic (after streaming done)
+    // 2. If message is pending (ai_state: 'pending'), show loading even if not actively streaming
+    if (isAssistant && message.ai_state === 'pending') {
+      const loadingText = isEditingMode ? 'Editing document' : 'Generating response';
+      return renderGeneratingLoading(loadingText);
+    }
+
+    // 3. Assistant message logic (after streaming done)
     if (isAssistant) {
       if (hasContent) {
         return (
@@ -355,37 +363,18 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
           </div>
         );
       }
-      // If AI response has no content and no document, treat it as an error
+      // If AI response has no content and no document, show a simple error message
       if (onRetry) {
         return (
-          <div className="bg-red-900/20 text-red-100 rounded-2xl rounded-bl-md px-4 py-3 border border-red-500/30 backdrop-blur-sm">
-            <div className="flex items-center space-x-2 mb-2">
-              <AlertCircle className="w-4 h-4 text-red-400" />
-              <div className="text-sm font-medium text-red-400">
-                Failed to generate response
-              </div>
-            </div>
-            <div className="text-sm opacity-90 mb-3">
-              Something went wrong while generating the response.
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => onRetry(message.id)}
-                className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors font-medium"
-              >
-                <RefreshCw className="w-3 h-3" />
-                <span>Retry</span>
-              </button>
-              {onDismiss && (
-                <button
-                  onClick={() => onDismiss(message.id)}
-                  className="flex items-center space-x-1 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-gray-300 text-xs rounded-md transition-colors font-medium"
-                >
-                  <X className="w-3 h-3" />
-                  <span>Dismiss</span>
-                </button>
-              )}
-            </div>
+          <div className="text-sm opacity-75 italic text-red-300 flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4" />
+            <span>No response generated.</span>
+            <button
+              onClick={() => onRetry(message.id)}
+              className="ml-2 text-blue-400 hover:text-blue-300 underline"
+            >
+              Retry
+            </button>
           </div>
         );
       }
@@ -398,10 +387,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       );
     }
 
-    // 3. User messages
+    // 4. User messages
     if (hasContent) return displayContent;
 
-    // 4. Fallback for empty user message
+    // 5. Fallback for empty user message
     return (
       <div className="text-sm opacity-75 italic">
         Message sent.
@@ -421,11 +410,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       </div>
     );
   }
-  // Handle different message states
-  if (isError || message.state === 'error') {
-    const errorMessage = message.error?.message || message.content || 'Something went wrong while generating the response.';
-    const retryCount = message.error?.retryCount || 0;
-    const isRetrying = message.state === 'retrying';
+  // Handle error state - simplified approach
+  if (message.ai_state === 'error') {
+    const errorMessage = message.ai_error_message || 'Something went wrong while generating the response.';
+    const retryCount = message.ai_retry_count || 0;
 
     return (
       <div className="flex items-start space-x-3">
@@ -436,46 +424,37 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
           <div className="flex items-center space-x-2 mb-2">
             <AlertCircle className="w-4 h-4 text-red-400" />
             <div className="text-sm font-medium text-red-400">
-              {isRetrying ? 'Regenerating response...' : 'Failed to generate response'}
+              Failed to generate response
             </div>
           </div>
           <div className="text-sm opacity-90 mb-3">
-            {isRetrying ? 'Please wait while we retry your request.' : errorMessage}
+            {errorMessage}
           </div>
-          {retryCount > 0 && !isRetrying && (
+          {retryCount > 0 && (
             <div className="text-xs text-red-300 opacity-75 mb-3">
-              Attempt {retryCount + 1} failed
+              Retry attempt {retryCount}
             </div>
           )}
-          {!isRetrying && (
-            <div className="flex items-center space-x-2">
-              {onRetry && (
-                <button
-                  onClick={() => onRetry(message.id)}
-                  className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors font-medium"
-                  disabled={isRetrying}
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  <span>Retry</span>
-                </button>
-              )}
-              {onDismiss && (
-                <button
-                  onClick={() => onDismiss(message.id)}
-                  className="flex items-center space-x-1 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-gray-300 text-xs rounded-md transition-colors font-medium"
-                >
-                  <X className="w-3 h-3" />
-                  <span>Dismiss</span>
-                </button>
-              )}
-            </div>
-          )}
-          {isRetrying && (
-            <div className="flex items-center space-x-2 text-blue-400">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm">Regenerating response...</span>
-            </div>
-          )}
+          <div className="flex items-center space-x-2">
+            {onRetry && (
+              <button
+                onClick={() => onRetry(message.id)}
+                className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors font-medium"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Retry</span>
+              </button>
+            )}
+            {onDismiss && (
+              <button
+                onClick={() => onDismiss(message.id)}
+                className="flex items-center space-x-1 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-gray-300 text-xs rounded-md transition-colors font-medium"
+              >
+                <X className="w-3 h-3" />
+                <span>Dismiss</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );

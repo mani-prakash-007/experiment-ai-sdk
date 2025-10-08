@@ -80,14 +80,7 @@ export interface FloatingDockProps {
   isDocumentVersionsLoading?: boolean;
 }
 
-export type MessageState = 'pending' | 'success' | 'error' | 'retrying';
-
-export interface MessageError {
-  message: string;
-  type: 'network' | 'timeout' | 'server' | 'unknown';
-  retryCount: number;
-  timestamp: string;
-}
+export type MessageState = 'pending' | 'success' | 'error';
 
 export interface Message {
   id: string;
@@ -97,15 +90,21 @@ export interface Message {
   document?: DocumentMetadata; // JSONB document metadata
   file_data?: UploadedFile;
   created_at: string;
-  // Client-side only fields for error handling
-  state?: MessageState;
-  error?: MessageError;
-  originalRequest?: {
+  // Simplified error/retry fields
+  ai_state?: 'pending' | 'success' | 'error';
+  ai_error_message?: string | null;
+  ai_retry_count?: number | null;
+  ai_original_request?: {
     input: string;
-    model: ModelOption;
-    uploadedFile?: UploadedFile;
-    documentReference?: any;
-  };
+    model: {
+      id: string;
+      name: string;
+      provider: string;
+    };
+    uploadedFile?: { storagePath: string };
+    documentReference?: { documentId: string; version?: number };
+    fullContext: any[]; // Complete conversation context sent to AI
+  } | null;
 }
 
 export interface ChatSession {
