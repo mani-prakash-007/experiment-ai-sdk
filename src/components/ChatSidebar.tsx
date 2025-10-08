@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { MessageSquare, Trash2, Search, XCircle, User as UserIcon, LogOut, Plus, LibraryBig } from 'lucide-react';
+import { MessageSquare, Trash2, Search, XCircle, User as UserIcon, LogOut, Plus, LibraryBig, Menu, ChevronLeft } from 'lucide-react';
 import { useChatSessions } from '@/app/hooks/useChatSessions';
 import { useAuth } from '@/app/hooks/useAuth';
 import { toast } from 'sonner';
@@ -16,7 +16,6 @@ export const ChatSidebar: React.FC = () => {
   const [galleryLoading, setGalleryLoading] = useState(false);
   const expandedDropdownRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const router = useRouter();
   const params = useParams();
@@ -64,17 +63,8 @@ export const ChatSidebar: React.FC = () => {
     toast.success('Session deleted');
   };
 
-  const handleMouseEnter = () => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
-    setIsExpanded(true);
-  };
-
-  const handleMouseLeave = () => {
-    hoverTimeoutRef.current = setTimeout(() => {
-      setIsExpanded(false);
-    }, 300); // Small delay to prevent flickering
+  const toggleSidebar = () => {
+    setIsExpanded(!isExpanded);
   };
 
   const filteredSessions = useMemo(() =>
@@ -151,13 +141,7 @@ export const ChatSidebar: React.FC = () => {
 
 
 
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
-    };
-  }, []);
+
 
   return (
     <div 
@@ -167,8 +151,6 @@ export const ChatSidebar: React.FC = () => {
         transition-all duration-300 ease-in-out shadow-2xl
         ${isExpanded ? 'w-80' : 'w-16'}
       `}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
     >
       {/* Always Visible Icon Bar */}
       <div className="absolute left-0 top-0 w-16 h-full bg-gray-900/80 backdrop-blur-sm flex flex-col z-10 border-r border-gray-600/30">
@@ -216,9 +198,13 @@ export const ChatSidebar: React.FC = () => {
             </span>
           </button>
 
-          {/* Sessions Indicator */}
-          <div className="relative group p-3 bg-gray-700/60 text-gray-300 rounded-xl transition-all duration-200">
-            <MessageSquare className="w-5 h-5" />
+          {/* Toggle Sidebar Button */}
+          <button
+            onClick={toggleSidebar}
+            className="relative group p-3 bg-gray-700/60 hover:bg-gray-600/60 text-gray-300 hover:text-white rounded-xl transition-all duration-200 cursor-pointer"
+            title={isExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
+          >
+            {isExpanded ? <ChevronLeft className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             {sessions.length > 0 && (
               <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
                 {sessions.length > 9 ? '9+' : sessions.length}
@@ -227,9 +213,9 @@ export const ChatSidebar: React.FC = () => {
             <span className={`absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-gray-800/90 backdrop-blur-sm text-white text-xs rounded-lg px-3 py-1.5 transition-all duration-200 whitespace-nowrap z-50 border border-gray-600/50 ${
               isExpanded ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
             }`}>
-              {sessions.length} Sessions
+              {isExpanded ? 'Collapse' : 'Expand'} Sidebar
             </span>
-          </div>
+          </button>
         </div>
 
         {/* User Profile - Always Visible at Bottom */}
