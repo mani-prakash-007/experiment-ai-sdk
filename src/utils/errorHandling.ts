@@ -12,37 +12,6 @@ export const defaultRetryOptions: RetryOptions = {
   exponentialBackoff: true,
 };
 
-export async function withRetry<T>(
-  fn: () => Promise<T>,
-  options: Partial<RetryOptions> = {}
-): Promise<T> {
-  const { maxRetries, delayMs, exponentialBackoff } = { ...defaultRetryOptions, ...options };
-  
-  let lastError: Error;
-  
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error as Error;
-      
-      // Don't retry on the last attempt
-      if (attempt === maxRetries) {
-        break;
-      }
-      
-      // Calculate delay for next attempt
-      const delay = exponentialBackoff 
-        ? delayMs * Math.pow(2, attempt)
-        : delayMs;
-      
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-  
-  throw lastError!;
-}
-
 export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;

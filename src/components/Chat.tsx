@@ -13,7 +13,7 @@ import { useDocuments } from '@/app/hooks/useDocument';
 import { Message, ModelOption, UploadedFile, UploadedFileWithUrl, DocumentReference, DocumentMetadata } from '@/app/types/chat';
 import { generatePresignedUrl } from '@/utils/presignedUrls';
 import { toast } from 'sonner';
-import { withRetry, getErrorMessage, isNetworkError } from '@/utils/errorHandling';
+import { getErrorMessage, isNetworkError } from '@/utils/errorHandling';
 import { useParams } from 'next/navigation';
 import { ChatBubble } from '@/components/ChatBubble';
 import { WelcomeScreen } from '@/components/WelcomeScreen';
@@ -341,7 +341,7 @@ export default function Chat() {
     
     // Submit the retry request
     submit({ messages: contextToSend, model: modelOption });
-  }, [activeSessionId, messages, generatePresignedUrl, getDocumentByReference, submitAIRequest]);
+  }, [activeSessionId, messages, generatePresignedUrl, getDocumentByReference]);
 
   // Simple retry handler
   const handleRetry = useCallback(async (assistantMessageId: string) => {
@@ -649,6 +649,16 @@ export default function Chat() {
       scrollToBottom();
     }, 2000);
   }, [activeSessionId, scrollToBottom]);
+
+  // Scroll to bottom when messages are loaded for the first time (initial rendering)
+  useEffect(() => {
+    if (messages.length > 0 && !messagesLoading) {
+      // Add a small delay to ensure DOM is updated
+      setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+    }
+  }, [messages.length > 0 && !messagesLoading, scrollToBottom]);
 
   // DOC View Logic 
   const openDocument = (documentId: string, documentVersion: number | null) => {
