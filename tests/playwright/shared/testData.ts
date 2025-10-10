@@ -17,3 +17,6 @@ export const TEST_ACCOUNTS = {
     password: 'ValidPass123!'
   }
 };
+
+// Authentication state file path
+export const AUTH_STATE_FILE = 'tests/playwright/.auth/user.json';

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TEST_ACCOUNTS } from '../shared/testData';
+import { TEST_ACCOUNTS, AUTH_STATE_FILE } from '../shared/testData';
 
 // Configure tests to run serially to avoid rate limiting and server crashes
 test.describe.configure({ mode: 'serial' });
@@ -325,8 +325,12 @@ test.describe('Sign In Form Validation Tests', () => {
     
     await fillAndSubmitForm(page, email, password);
     
-    // Should redirect to dashboard or home page (successful login)
-    await expect(page).not.toHaveURL('/auth/signin');
+    // Should redirect to chat page (successful login)
+    await page.waitForURL('/chat');
+    await expect(page).toHaveURL('/chat');
+    
+    // Save the authentication state for use in subsequent tests
+    await page.context().storageState({ path: AUTH_STATE_FILE });
     
     // No validation errors should be shown before redirect
     const emailError = page.locator('input#email + p.text-red-400');
@@ -348,6 +352,6 @@ test.describe('Sign In Form Validation Tests', () => {
     
     // Check we're no longer on signin page
     const currentUrl = page.url();
-    expect(currentUrl).not.toContain('/auth/signin');
+    expect(currentUrl).toContain('/chat');
   });
 });
