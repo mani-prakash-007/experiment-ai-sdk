@@ -44,6 +44,7 @@ next-env.d.ts
 node_modules/
 /test-results/
 /playwright-report/
+/playwright/
 /blob-report/
-/playwright/.cache/
-/playwright/.auth/user.json
+tests/playwright/.cache/
+tests/playwright/.auth/user.json

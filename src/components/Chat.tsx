@@ -148,7 +148,6 @@ export default function Chat() {
     updateMessage,
   } = useChatMessages({ sessionId: activeSessionId });
 
-  console.log(messages)
   const containerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 

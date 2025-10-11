@@ -6,6 +6,10 @@ import { perplexity } from "@ai-sdk/perplexity";
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 
+// Type imports for development - these will be tree-shaken in production
+import type { LanguageModel } from "ai";
+
+// Schema for the structured response
 const CanvasDocumentSchema = z.object({
   general: z
     .string()
@@ -23,6 +27,25 @@ const CanvasDocumentSchema = z.object({
     })
     .optional(),
 });
+
+// Test mode configuration
+const IS_TESTING = process.env.NEXT_APP_ENV === 'test';
+
+// Dynamic import for mock functionality (only in test mode)
+async function createMockModel(userMessage: string): Promise<LanguageModel> {
+  if (!IS_TESTING) {
+    throw new Error('Mock model should only be used in test mode');
+  }
+  
+  try {
+    // Dynamic import with relative path from src/app/api/chat to tests/playwright/shared
+    const mockModule = await import('../../../../tests/playwright/shared/mockAiModel');
+    return mockModule.createMockAiModel(userMessage);
+  } catch (error) {
+    console.error('Failed to import mock model:', error);
+    throw new Error('Mock functionality not available');
+  }
+}
 
 interface MessageContentPart {
   type: string;
@@ -48,8 +71,8 @@ interface MessageInput {
 }
 
 function toModelMessages(messages: MessageInput[]): ModelMessage[] {
+  // Your existing toModelMessages implementation
   return messages.map((msg) => {
-    // Handle messages that already have content array structure
     if (Array.isArray(msg.content)) {
       return {
         role: msg.role,
@@ -60,7 +83,6 @@ function toModelMessages(messages: MessageInput[]): ModelMessage[] {
     // Handle original API message format
     const parts: MessageContentPart[] = [];
 
-    // Add document reference context if present
     if (msg.documentReference) {
       parts.push({
         type: "text",
@@ -68,7 +90,6 @@ function toModelMessages(messages: MessageInput[]): ModelMessage[] {
       });
     }
 
-    // Add text content if present
     if (msg.content && typeof msg.content === 'string' && msg.content.trim()) {
       parts.push({
         type: "text",
@@ -76,17 +97,14 @@ function toModelMessages(messages: MessageInput[]): ModelMessage[] {
       });
     }
 
-    // Add file if present
     if (msg.file && msg.file.storagePath) {
       const mime = msg.file.metadata?.type || "";
-
-      // Use presigned URL if available, fallback to storagePath for error handling
       const fileUrl = msg.file.fileUrl || msg.file.storagePath;
 
       if (mime.startsWith("image/")) {
         parts.push({
           type: "image",
-          image: fileUrl, // Direct URL string, not object
+          image: fileUrl,
         });
       } else if (mime === "application/pdf") {
         parts.push({
@@ -106,7 +124,6 @@ function toModelMessages(messages: MessageInput[]): ModelMessage[] {
           mediaType: mime,
         });
       } else {
-        // Fallback: add as text description
         parts.push({
           type: "text",
           text: `[File uploaded: ${msg.file.metadata?.originalName || 'Unknown'} (${mime})]`,
@@ -114,11 +131,10 @@ function toModelMessages(messages: MessageInput[]): ModelMessage[] {
       }
     }
 
-    // Ensure we have at least one content part
     if (parts.length === 0) {
       parts.push({
         type: "text",
-        text: "...", // Fallback for empty messages
+        text: "...",
       });
     }
 
@@ -129,8 +145,10 @@ function toModelMessages(messages: MessageInput[]): ModelMessage[] {
   });
 }
 
-// Helper function to get the appropriate model based on provider
-function getModelInstance(model: { id: string; name: string; provider: string }) {
+/**
+ * Get the appropriate model instance based on provider
+ */
+function getModelInstance(model: { id: string; name: string; provider: string }): LanguageModel {
   switch (model.provider.toLowerCase()) {
     case "google":
       return google(model.id);
@@ -143,6 +161,30 @@ function getModelInstance(model: { id: string; name: string; provider: string })
     default:
       throw new Error(`Unsupported model provider: ${model.provider}`);
   }
+}
+
+/**
+ * Extract user message content from messages array for mock testing
+ */
+function extractUserMessage(messages: any[]): string {
+  const lastUserMessage = messages
+    .filter(msg => msg.role === 'user')
+    .pop();
+  
+  if (!lastUserMessage) {
+    return '';
+  }
+
+  if (typeof lastUserMessage.content === 'string') {
+    return lastUserMessage.content;
+  }
+  
+  if (Array.isArray(lastUserMessage.content)) {
+    const textPart = lastUserMessage.content.find((part: any) => part.type === 'text');
+    return textPart?.text || '';
+  }
+  
+  return '';
 }
 
 export async function POST(req: Request) {
@@ -166,10 +208,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // Convert to ModelMessage format
     const modelMessages = toModelMessages(messages);
 
-    // Validate that we have proper ModelMessage format
     for (const msg of modelMessages) {
       if (!msg.role || !['user', 'assistant', 'system'].includes(msg.role)) {
         throw new Error(`Invalid message role: ${msg.role}`);
@@ -179,8 +219,15 @@ export async function POST(req: Request) {
       }
     }
 
-    // Get model instance
-    const modelInstance = getModelInstance(model);
+    // Determine which model to use based on testing mode
+    let modelInstance: LanguageModel;
+    
+    if (IS_TESTING) {
+      const userContent = extractUserMessage(messages);
+      modelInstance = await createMockModel(userContent);
+    } else {
+      modelInstance = getModelInstance(model);
+    }
 
     const result = streamObject({
       model: modelInstance,
