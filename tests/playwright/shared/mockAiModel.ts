@@ -1,6 +1,6 @@
 import { MockLanguageModelV2 } from "ai/test";
 import { simulateReadableStream } from "ai";
-import { findMockResponse } from "./mockAiResponses";
+import { findMockResponse, generateMockTitle } from "./mockAiResponses";
 
 /**
  * Creates a mock AI model for testing that simulates streaming responses
@@ -25,6 +25,22 @@ export function createMockAiModel(userMessage: string): MockLanguageModelV2 {
           },
         ],
       }),
+    }),
+  });
+}
+
+/**
+ * Creates a mock AI model for title generation testing
+ */
+export function createMockTitleModel(message: string): MockLanguageModelV2 {
+  const mockTitle = generateMockTitle(message);
+  
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      content: [{ type: 'text', text: mockTitle }],
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      warnings: []
     }),
   });
 }

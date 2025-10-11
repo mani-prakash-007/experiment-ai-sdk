@@ -26,8 +26,15 @@ export const ChatSidebar: React.FC = () => {
     sessions,
     loading,
     createSession,
-    deleteSession
+    deleteSession,
+    refreshSessions
   } = useChatSessions(user?.id);
+
+  useEffect(()=> {
+    if(isExpanded) {
+      refreshSessions();
+    }
+  }, [isExpanded])
 
   const handleNewSession = async () => {
     setNewSessionLoading(true);
@@ -151,15 +158,17 @@ export const ChatSidebar: React.FC = () => {
         transition-all duration-300 ease-in-out shadow-2xl
         ${isExpanded ? 'w-80' : 'w-16'}
       `}
+      data-testid="chat-sidebar"
     >
       {/* Always Visible Icon Bar */}
-      <div className="absolute left-0 top-0 w-16 h-full bg-gray-900/80 backdrop-blur-sm flex flex-col z-10 border-r border-gray-600/30">
+      <div className="absolute left-0 top-0 w-16 h-full bg-gray-900/80 backdrop-blur-sm flex flex-col z-10 border-r border-gray-600/30" data-testid="sidebar-icon-bar">
         {/* Top Actions */}
-        <div className="flex flex-col items-center py-4 space-y-3">
+        <div className="flex flex-col items-center py-4 space-y-3" data-testid="sidebar-top-actions">
           {/* New Session - Always Visible */}
           <button
             onClick={handleNewSession}
             disabled={newSessionLoading}
+            data-testid='iconbar-new-session-button'
             className={`relative group p-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-blue-500/25 ${
               newSessionLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
             }`}
@@ -185,6 +194,7 @@ export const ChatSidebar: React.FC = () => {
               galleryLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
             }`}
             title="File Gallery"
+            data-testid="iconbar-gallery-button"
           >
             {galleryLoading ? (
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -203,10 +213,11 @@ export const ChatSidebar: React.FC = () => {
             onClick={toggleSidebar}
             className="relative group p-3 bg-gray-700/60 hover:bg-gray-600/60 text-gray-300 hover:text-white rounded-xl transition-all duration-200 cursor-pointer"
             title={isExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
+            data-testid="sidebar-toggle-button"
           >
             {isExpanded ? <ChevronLeft className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             {sessions.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+              <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium" data-testid="session-count-badge">
                 {sessions.length > 9 ? '9+' : sessions.length}
               </span>
             )}
@@ -219,13 +230,13 @@ export const ChatSidebar: React.FC = () => {
         </div>
 
         {/* User Profile - Always Visible at Bottom */}
-        <div className="mt-auto pb-4 flex flex-col items-center">
+        <div className="mt-auto pb-4 flex flex-col items-center" data-testid="iconbar-user-profile">
           <div className="relative group">
-            <div className=" bg-gray-700/80 rounded-xl transition-all duration-200 relative">
+            <div className=" bg-gray-700/80 rounded-xl transition-all duration-200 relative" data-testid="user-avatar-container">
               {user?.user_metadata?.avatar_url ? (
-                <img src={user?.user_metadata?.avatar_url} alt="avatar" className="w-10 h-10 rounded-lg object-cover" />
+                <img src={user?.user_metadata?.avatar_url} alt="avatar" className="w-10 h-10 rounded-lg object-cover" data-testid="user-avatar-image" />
               ) : (
-                <div className="w-10 h-10 bg-gray-600 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-gray-600 rounded-lg flex items-center justify-center" data-testid="user-avatar-placeholder">
                   <UserIcon className="w-6 h-6 text-white" />
                 </div>
               )}
@@ -245,9 +256,9 @@ export const ChatSidebar: React.FC = () => {
       <div className={`
         flex flex-col h-full ml-16 transition-all duration-300 relative z-20
         ${isExpanded ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4 pointer-events-none'}
-      `}>
+      `} data-testid="expanded-sidebar-content">
         {/* Header */}
-        <div className="p-4 border-b border-gray-600/30">
+        <div className="p-4 border-b border-gray-600/30" data-testid="sidebar-header">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-blue-400" />
             Sessions
@@ -255,7 +266,7 @@ export const ChatSidebar: React.FC = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="p-4 border-b border-gray-600/30">
+        <div className="p-4 border-b border-gray-600/30" data-testid="quick-actions-section">
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={handleNewSession}
@@ -263,6 +274,7 @@ export const ChatSidebar: React.FC = () => {
               className={`flex items-center gap-2 p-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-blue-500/25 ${
                 newSessionLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
               }`}
+              data-testid="expanded-new-session-button"
             >
               {newSessionLoading ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -277,6 +289,7 @@ export const ChatSidebar: React.FC = () => {
               className={`flex items-center gap-2 p-3 bg-gray-700/80 hover:bg-gray-600/80 text-white rounded-xl transition-all duration-200 hover:scale-105 ${
                 galleryLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
               }`}
+              data-testid="expanded-gallery-button"
             >
               {galleryLoading ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -289,7 +302,7 @@ export const ChatSidebar: React.FC = () => {
         </div>
 
         {/* Search Bar */}
-        <div className="p-4 border-b border-gray-600/30">
+        <div className="p-4 border-b border-gray-600/30" data-testid="search-section">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -298,19 +311,21 @@ export const ChatSidebar: React.FC = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-gray-800/50 border border-gray-600/50 rounded-xl pl-10 pr-10 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-200 "
+              data-testid="session-search-input"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors duration-200"
+                data-testid="clear-search-button"
               >
                 <XCircle className="w-4 h-4" />
               </button>
             )}
           </div>
           {searchTerm && (
-            <div className="mt-2 text-xs text-gray-400 flex items-center gap-2">
-              <span className="bg-blue-500/20 text-blue-300 px-2 py-1 rounded-full">
+            <div className="mt-2 text-xs text-gray-400 flex items-center gap-2" data-testid="search-results-info">
+              <span className="bg-blue-500/20 text-blue-300 px-2 py-1 rounded-full" data-testid="search-results-count">
                 {filteredSessions.length} of {sessions.length}
               </span>
               <span>sessions found</span>
@@ -319,14 +334,14 @@ export const ChatSidebar: React.FC = () => {
         </div>
 
         {/* Sessions List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" data-testid="sessions-list">
           {loading ? (
-            <div className="p-6 text-center text-gray-400">
+            <div className="p-6 text-center text-gray-400" data-testid="sessions-loading">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-3"></div>
               <p>Loading sessions...</p>
             </div>
           ) : filteredSessions.length === 0 ? (
-            <div className="p-6 text-center text-gray-400">
+            <div className="p-6 text-center text-gray-400" data-testid="empty-sessions-state">
               <div className="bg-gray-800/50 rounded-2xl p-6 backdrop-blur-sm">
                 <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50 text-gray-500" />
                 {searchTerm ? (
@@ -336,6 +351,7 @@ export const ChatSidebar: React.FC = () => {
                     <button
                       onClick={() => setSearchTerm('')}
                       className="mt-3 text-blue-400 hover:text-blue-300 text-sm underline transition-colors duration-200"
+                      data-testid="clear-search-no-results"
                     >
                       Clear search
                     </button>
@@ -350,6 +366,7 @@ export const ChatSidebar: React.FC = () => {
                       className={`mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center gap-2 ${
                         newSessionLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                       }`}
+                      data-testid="create-first-session-button"
                     >
                       {newSessionLoading && (
                         <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
@@ -361,7 +378,7 @@ export const ChatSidebar: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="p-2 space-y-1">
+            <div className="p-2 space-y-1" data-testid="sessions-container">
               {filteredSessions.map((session, index) => (
                 <div
                   key={session.id}
@@ -372,21 +389,22 @@ export const ChatSidebar: React.FC = () => {
                   }`}
                   onClick={() => handleSessionSelect(session.id)}
                   style={{ animationDelay: `${index * 30}ms` }}
+                  data-testid={`session-item-${index}`}
                 >
                   <div className={`p-2 rounded-lg mr-3 ${
                     activeSessionId === session.id 
                       ? 'bg-blue-500/20 text-blue-300' 
                       : 'bg-gray-700/50 text-gray-400 group-hover:bg-gray-600/50 group-hover:text-gray-300'
-                  }`}>
+                  }`} data-testid="session-icon">
                     <MessageSquare className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate text-sm">
+                    <div className="font-medium truncate text-sm" data-testid="session-title">
                       {highlightSearchTerm(session.title, searchTerm)}
                     </div>
                     <div className={`text-xs opacity-75 transition-colors duration-200 ${
                       activeSessionId === session.id ? 'text-blue-200' : 'text-gray-500'
-                    }`}>
+                    }`} data-testid="session-date">
                       {formatDate(session.updated_at)}
                     </div>
                   </div>
@@ -397,6 +415,7 @@ export const ChatSidebar: React.FC = () => {
                         handleSessionDelete(session.id);
                     }}
                     className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded-lg transition-all duration-200 transform hover:scale-110 cursor-pointer"
+                    data-testid={`delete-session-${session.id}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -407,7 +426,7 @@ export const ChatSidebar: React.FC = () => {
         </div>
 
         {/* User Profile Section - Expanded Sidebar */}
-        <div className="p-2 border-t border-gray-600/30 mt-auto">
+        <div className="p-2 border-t border-gray-600/30 mt-auto" data-testid="expanded-user-profile">
           <div className="relative" ref={expandedDropdownRef}>
             <button
               onClick={(e) => {
@@ -415,16 +434,17 @@ export const ChatSidebar: React.FC = () => {
                 setExpandedDropdownOpen(!expandedDropdownOpen);
               }}
               className="w-full flex items-center gap-3 p-3 bg-gray-700/50 hover:bg-gray-600/50 rounded-xl transition-all duration-200 group cursor-pointer"
+              data-testid="user-profile-button"
             >
               <div className="flex-1 text-left min-w-0">
-                <div className="text-white text-sm font-medium truncate">{user?.email}</div>
-                <div className="text-gray-400 text-xs capitalize">{user?.app_metadata?.provider || 'Email'}</div>
+                <div className="text-white text-sm font-medium truncate" data-testid="user-email">{user?.email}</div>
+                <div className="text-gray-400 text-xs capitalize" data-testid="user-provider">{user?.app_metadata?.provider || 'Email'}</div>
               </div>
             </button>
 
             {/* Dropdown for Expanded Sidebar */}
             {expandedDropdownOpen && (
-              <div className="absolute bottom-full left-0 right-0 mb-2 bg-gray-800 border border-gray-600/50 rounded-xl shadow-2xl overflow-hidden z-[70]">
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-gray-800 border border-gray-600/50 rounded-xl shadow-2xl overflow-hidden z-[70]" data-testid="user-dropdown-menu">
                 <div className="p-1">
                   <button
                     onClick={async (e) => {
@@ -437,6 +457,7 @@ export const ChatSidebar: React.FC = () => {
                       }
                     }}
                     className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-red-500/10 hover:text-red-400 text-gray-300 text-sm transition-colors duration-200 rounded-lg cursor-pointer"
+                    data-testid="sign-out-button"
                   >
                     <LogOut className="w-4 h-4 flex-shrink-0" />
                     <span>Sign Out</span>

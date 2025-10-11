@@ -301,10 +301,12 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   }
 
   return (
-    <div>
+    <div data-testid="floating-dock">
       {/* Error Display */}
       {uploadError && (
-        <div className="mb-3 p-2 bg-red-900/20 border border-red-500/30 rounded-lg">
+        <div className="mb-3 p-2 bg-red-900/20 border border-red-500/30 rounded-lg"
+        data-testid="chat-upload-file-error"
+        >
           <p className="text-red-400 text-sm">{uploadError}</p>
           <button 
             onClick={() => setUploadError(null)}
@@ -317,7 +319,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
 
       {/* Uploaded Files Display */}
       {uploadedFile && (
-        <div className="mb-3">
+        <div className="mb-3" data-testid="chat-uploaded-file">
           <div title={`${uploadedFile.fileName} (${uploadedFile.metadata.type})`} className="relative bg-slate-800/70 backdrop-blur-sm border border-slate-600/50 rounded-lg p-2 pr-8 flex items-center space-x-2 max-w-xs cursor-default">
             {uploadedFile.metadata?.type?.startsWith('image/') ? (
               <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-slate-300">
@@ -348,7 +350,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
 
       {/* Document Reference Display */}
       {documentReference && (
-        <div className="mb-3">
+        <div className="mb-3" data-testid="chat-referenced-document">
           <div title={`Referenced Document: ${documentReference.title}`} className="relative bg-purple-800/70 backdrop-blur-sm border border-purple-600/50 rounded-lg p-2 pr-8 flex items-center space-x-2 max-w-xs cursor-default">
             <div className="w-8 h-8 bg-purple-700 rounded flex items-center justify-center text-purple-300">
               <Edit3 className="w-4 h-4" />
@@ -384,6 +386,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
               <div className="relative my-1" ref={modelDropdownRef}>
                 <button
                   type="button"
+                  data-testid='chat-model-selection-button'
                   onClick={() => setShowModelDropdown(!showModelDropdown)}
                   className="px-3 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-600/50 hover:border-slate-500/70 rounded-lg text-slate-300 text-sm flex items-center space-x-1 transition-all duration-200"
                 >
@@ -392,7 +395,9 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                 </button>
 
                 {showModelDropdown && (
-                  <div className="absolute bottom-full mb-2 left-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 min-w-48 z-50">
+                  <div className="absolute bottom-full mb-2 left-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 min-w-48 z-50" 
+                  data-testid='chat-model-dropdown-list'
+                  >
                     {Object.entries(MODEL_OPTIONS).map(([provider, models]) => (
                       <div key={provider}>
                         <div className="px-3 py-1 text-xs font-medium text-slate-400 uppercase tracking-wide">
@@ -402,6 +407,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                           <button
                             key={model.id}
                             type="button"
+                            data-testid={`chat-model-${model.id}-button`}
                             onClick={() => {
                               onModelChange?.(model);
                               setShowModelDropdown(false);
@@ -424,6 +430,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
               <div className="relative my-1" ref={uploadDropdownRef}>
                 <button
                   type="button"
+                  data-testid='chat-upload-selection-button'
                   onClick={() => setShowUploadDropdown(!showUploadDropdown)}
                   disabled={isUploading || !user}
                   className="px-3 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-600/50 hover:border-slate-500/70 rounded-lg text-slate-300 text-sm flex items-center space-x-1 transition-all duration-200 disabled:opacity-50"
@@ -438,13 +445,16 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                 </button>
 
                 {showUploadDropdown && user && (
-                  <div className="absolute bottom-full mb-2 left-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 min-w-40 z-50">
+                  <div className="absolute bottom-full mb-2 left-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 min-w-40 z-50"
+                  data-testid='chat-upload-dropdown-list'
+                  >
                     <div className="px-3 py-1 text-xs font-medium text-slate-400 uppercase tracking-wide">
                       Upload Files (Max 5MB)
                     </div>
                     <button
                       type="button"
                       onClick={() => handleFileUpload('image')}
+                      data-testid='chat-upload-image-button'
                       disabled={isUploading}
                       className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white flex items-center space-x-2 transition-colors duration-150 disabled:opacity-50"
                     >
@@ -455,6 +465,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                     <button
                       type="button"
                       onClick={() => handleFileUpload('pdf')}
+                      data-testid='chat-upload-pdf-button'
                       disabled={isUploading}
                       className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white flex items-center space-x-2 transition-colors duration-150 disabled:opacity-50"
                     >
@@ -465,6 +476,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                     <button
                       type="button"
                       onClick={() => handleFileUpload('text')}
+                      data-testid='chat-upload-text-button'
                       disabled={isUploading}
                       className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white flex items-center space-x-2 transition-colors duration-150 disabled:opacity-50"
                     >
@@ -480,12 +492,16 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
             {/* Input area */}
             <div className="flex-1 relative group flex justify-center items-center">
                 {showKeywordRefDropdown && (
-                  <div className="absolute bottom-full mb-2 left-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl min-w-48 z-50">
+                  <div
+                  className="absolute bottom-full mb-2 left-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl min-w-48 z-50"
+                  data-testid='keyword-dropdown'
+                  >
                   <div 
                     className="relative"
                   >
                     <div 
                       className="flex items-center  px-3 py-3 text-xs font-medium text-slate-400 uppercase hover:bg-slate-700/50 cursor-pointer rounded-xl"
+                      data-testid='chat-keyword-dropdown-upload-button'
                       onClick={() => {
                         setShowKeywordRefDropdown(false)
                         setShowUploadDropdown(true)
@@ -496,6 +512,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                     </div>
                     <div 
                       className="flex items-center px-3 py-3 text-xs font-medium text-slate-400 uppercase hover:bg-slate-700/50 cursor-pointer rounded-xl"
+                       data-testid='chat-keyword-dropdown-model-button'
                       onClick={() => {
                         setShowKeywordRefDropdown(false)
                         setShowModelDropdown(true)
@@ -506,6 +523,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                     </div>
                     <div 
                       className="flex items-center px-3 py-3 text-xs font-medium text-slate-400 uppercase hover:bg-slate-700/50 cursor-pointer rounded-xl"
+                       data-testid='chat-keyword-dropdown-files-button'
                       onClick={() => setShowFilesList(!showFilesList)}
                     >
                       <Folder className="h-4 w-4 mx-3"/>
@@ -513,6 +531,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                     </div>
                     <div 
                       className="flex items-center px-3 py-3 text-xs font-medium text-slate-400 uppercase hover:bg-slate-700/50 cursor-pointer rounded-xl"
+                       data-testid='chat-keyword-dropdown-document-button'
                       onClick={async () => {
                         const newShowState = !showDocumentsList;
                         setShowDocumentsList(newShowState);
@@ -529,7 +548,9 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                     
                     {/* Files dropdown */}
                     {showFilesList && (
-                      <div className="absolute left-full bottom-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 min-w-48 ml-2">
+                      <div className="absolute left-full bottom-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 min-w-48 ml-2"
+                      data-testid='chat-keyword-dropdown-files-list'
+                      >
                       {messageFiles && messageFiles.length > 0 ? (
                         messageFiles.map((file, index) => (
                         <div 
@@ -551,7 +572,9 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
 
                     {/* Documents dropdown */}
                     {showDocumentsList && (
-                      <div className="absolute left-full bottom-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 w-80 ml-2 max-h-64 overflow-y-auto">
+                      <div className="absolute left-full bottom-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl py-2 w-80 ml-2 max-h-64 overflow-y-auto"
+                      data-testid='chat-keyword-dropdown-documents-list'
+                      >
                       {isDocumentVersionsLoading ? (
                         <div className="px-3 py-4 text-sm text-slate-400 flex items-center gap-2">
                           <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-400 border-t-transparent"></div>
@@ -599,6 +622,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                 value={input}
                 onChange={(e) => setInput(e.currentTarget.value)}
                 onKeyDown={handleKeyDown}
+                data-testid='chat-input'
                 placeholder={
                   !user ? "Sign in to chat..." :
                   documentReference ? "Describe how you'd like to edit the document..." :
@@ -625,6 +649,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
             {/* Send button */}
             <button
               type="submit"
+              data-testid='chat-submit-button'
               disabled={isLoading || !input.trim() || !user}
               className="
                 relative overflow-hidden px-4 py-3 rounded-xl

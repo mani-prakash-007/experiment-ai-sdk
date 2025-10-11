@@ -29,25 +29,45 @@ test.describe('Chat Functionality Tests', () => {
   });
 
   test('User is authenticated and on chat page', async ({ page }) => {
-    // Basic test to verify authentication is working
     await expect(page).toHaveURL('/chat');
-    
-    // Add your chat-specific assertions here
-    // For example, check if chat interface is loaded
-    // await expect(page.locator('[data-testid="chat-container"]')).toBeVisible();
+
+    await expect(page.locator('h2').nth(1)).toHaveText('Welcome to AI Canvas Chat');
   });
 
-  test('Chat interface loads correctly', async ({ page }) => {
-    // Test that the chat interface loads properly
-    await expect(page).toHaveURL('/chat');
+  test('Create a new Session', async({ page }) => {
+    // Increase timeout for this test due to AI response generation
+    test.setTimeout(60000);
     
-    // Add more specific tests for your chat functionality
-    // For example:
-    // - Check if message input is visible
-    // - Check if send button is present
-    // - Test sending a message
-    // - Test receiving responses
-  });
+    await page.getByTestId('iconbar-new-session-button').click();
+    await expect(page.getByTestId('floating-dock')).toBeVisible();
+    await page.getByTestId('sidebar-toggle-button').click();
+    await expect(page.getByTestId('expanded-sidebar-content')).toBeVisible();
+    await expect(page.getByTestId('session-item-0')).toContainText('Untitled Session');
+    await page.getByTestId('sidebar-toggle-button').click();
+    const input = page.getByTestId('chat-input');
+    await input.fill('Hi, How are you ?');
+    test.setTimeout(60000);
+    await page.getByTestId('chat-submit-button').click();
 
-  // Add more chat-specific tests here...
+    // Wait for user message to appear with increased timeout
+    await expect(page.getByTestId('message-text')).toBeVisible({ timeout: 20000 });
+    await expect(page.getByTestId('message-text')).toHaveText("Hi, How are you ?");
+    
+    // Wait for AI response loading state to appear
+    await expect(page.getByText('generating response')).toBeVisible({ timeout: 20000 });
+    
+    // Wait for AI response loading state to disappear and actual response to appear with extended timeout
+    await expect(page.getByText('generating response')).toBeHidden({ timeout: 30000 });
+    
+    // Wait for multiple message elements to exist and verify the last one
+    await expect(page.getByTestId('message-text')).toHaveCount(2, { timeout: 20000 });
+    await expect(page.getByTestId('message-text').last()).toHaveText("Hello! I'm doing great, thanks for asking 😊 How are you doing today?", { timeout: 5000 });
+    await page.getByTestId('sidebar-toggle-button').click();
+    await expect(page.getByTestId('expanded-sidebar-content')).toBeVisible();
+    await expect(page.getByTestId('session-item-0')).toContainText('Greetings');
+    await page.getByTestId('sidebar-toggle-button').click();
+    // Take screenshot after successful chat interaction
+    await expect(page).toHaveScreenshot('greet-chat-session-complete.png', { fullPage: true, maxDiffPixelRatio : 0.05 });
+  })
+
 });
