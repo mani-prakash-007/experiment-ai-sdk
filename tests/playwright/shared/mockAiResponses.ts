@@ -88,7 +88,7 @@ export const MOCK_AI_RESPONSES: Record<string, MockAiResponse> = {
   // ─────────────────────────────
   // 🧠 Markdown Sessions
   // ─────────────────────────────
-  "Explain quantum computing ? ": {
+  "Explain quantum computing ?": {
     document: '',
     title: "",
     general: `
@@ -186,7 +186,7 @@ export const MOCK_TITLE_RESPONSES: Record<string, string> = {
   //AI Article Request - Document Creation Session
   "Write an article about AI": "AI Article Request",
   //Questions - Markdown Response  session
-  "Explain quantum computing ? ": "Quantum Computing",
+  "Explain quantum computing ?": "Quantum Computing",
 };
 
 /**

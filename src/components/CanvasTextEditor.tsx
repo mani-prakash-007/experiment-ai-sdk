@@ -871,7 +871,8 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , docum
 
   if (documentNotFound) {
     return (
-      <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-zinc-900 to-gray-800 rounded-xl shadow-xl border border-zinc-800">
+      <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-zinc-900 to-gray-800 rounded-xl shadow-xl border border-zinc-800"
+      >
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
             <div className="text-red-400 mb-2">Document not found</div>
@@ -926,6 +927,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , docum
     <div 
       className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-zinc-900 to-gray-800 rounded-xl shadow-xl border border-zinc-800 transition-all duration-300"
       style={{ opacity: transitionOpacity }}
+       data-testid='canvas-text-editor-component'
     >
       {/* HEADER */}
       <div className="border-b bg-gray-800/60 backdrop-blur-xl rounded-t-xl border-gray-700 p-6 transition-all duration-300">
@@ -1027,6 +1029,7 @@ const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , docum
             {onClose && (
               <button
                 onClick={onClose}
+                data-testid='canvas-text-editor-close-button'
                 className="p-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg cursor-pointer"
                 type="button"
               >
