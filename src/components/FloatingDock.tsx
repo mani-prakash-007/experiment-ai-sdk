@@ -586,9 +586,10 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                             <div className="px-3 py-1 text-xs font-medium text-slate-400 bg-slate-700/30 truncate" title={doc.doc_title}>
                               {doc.doc_title}
                             </div>
-                            {doc.versions.map((version: { version_number: number; is_current?: boolean; created_at: string; reference_type: string; doc_title?: string }) => (
+                            {doc.versions.map((version: { version_number: number; is_current?: boolean; created_at: string; reference_type: string; doc_title?: string }, index: number) => (
                               <div 
                                 key={`${doc.doc_id}-v${version.version_number}`}
+                                data-testid={`reference-document-${index}`}
                                 className="px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/50 cursor-pointer flex items-center gap-2 border-l-2 border-slate-600 ml-2"
                                 onClick={() => handleVersionReference(doc.doc_id, doc.doc_title, version)}
                               >
