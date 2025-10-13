@@ -10,7 +10,7 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { generatePresignedUrl } from '@/utils/presignedUrls';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
 interface ChatBubbleProps {
@@ -40,15 +40,14 @@ const ChatBubbleComponent: React.FC<ChatBubbleProps> = ({
   const [fileUrls, setFileUrls] = useState<{ [key: string]: string }>({});
   const [loadingFiles, setLoadingFiles] = useState<{ [key: string]: boolean }>({});
 
-  const handleFileClick = async (storagePath: string) => {
+  const handleFileClick = async (storagePath: string, fileName: string) => {
     // If we already have a URL, use it
     if (fileUrls[storagePath]) {
       window.open(fileUrls[storagePath], '_blank');
       return;
     }
 
-    // Show loading state
-    setLoadingFiles(prev => ({ ...prev, [storagePath]: true }));
+        setLoadingFiles(prev => ({ ...prev, [storagePath]: true }));
 
     try {
       const presignedData = await generatePresignedUrl(storagePath); // Use default 1 hour expiry
@@ -65,7 +64,7 @@ const ChatBubbleComponent: React.FC<ChatBubbleProps> = ({
       setLoadingFiles(prev => ({ ...prev, [storagePath]: false }));
     }
   };
-  const renderFileContent = (fileData: UploadedFile) => {
+  const renderFileContent = (fileData: any) => {
     if (!fileData) return null;
 
     function prettySize( bytes : number) {

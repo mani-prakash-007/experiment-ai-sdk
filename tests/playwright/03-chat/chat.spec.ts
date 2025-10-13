@@ -203,4 +203,154 @@ test.describe('Chat Functionality Tests', () => {
       // Take screenshot after successful chat interaction
       await expect(page).toHaveScreenshot('markdown-chat-session-complete.png', { fullPage: true, maxDiffPixelRatio : 0.05 });
     })
+    test('Create a new session for File attachment', async({ page }) => {
+
+      //Spot session creation button
+      const sessionButton = page.getByTestId('iconbar-new-session-button')
+      await page.waitForTimeout(1000)
+      expect(sessionButton).toBeEnabled()
+      //Click the session creation Button
+      await sessionButton.click()
+
+      //Wait until floating dock is visible
+      await page.getByTestId('floating-dock').waitFor({ state: 'visible' });
+      await page.getByTestId('sidebar-toggle-button').click();
+      await page.getByTestId('expanded-sidebar-content').waitFor({ state: 'visible' });
+      await expect(page.getByTestId('session-item-0')).toContainText('Untitled Session');
+      await page.getByTestId('sidebar-toggle-button').click();
+     
+      //Attach the Image file
+      const uploadFileButton = page.getByTestId('chat-upload-selection-button');
+      await uploadFileButton.click();
+      //Wait for upload dropdown to be visible
+      await page.getByTestId('chat-upload-dropdown-list').waitFor({ state: 'visible' });
+      const imageUploadButton = page.getByTestId('chat-upload-image-button');
+      
+      // Set up file chooser before clicking the button
+      const fileChooserPromise = page.waitForEvent('filechooser');
+      await imageUploadButton.click();
+      const fileChooser = await fileChooserPromise;
+      
+      // Use an actual image file path - you'll need to place this in your test fixtures
+      await fileChooser.setFiles('tests/playwright/shared/files/sample-image-amazon.png');
+      
+      // Wait for file to be uploaded and displayed
+      await page.getByTestId('chat-uploaded-file').waitFor({ state: 'visible' });
+      
+
+      //Add input to the dock
+      const input = page.getByTestId('chat-input');
+      await input.fill('Explain what is in this image file');
+      const button = page.getByText('send')
+      expect(button).toBeEnabled();
+      await page.waitForTimeout(1000)
+      await button.click();
+      await page.waitForTimeout(1000)
+
+      // Wait for user message to appear with increased timeout
+      await page.getByTestId('message-text').waitFor({ state: 'visible', timeout: 20000 });
+      await expect(page.getByTestId('message-text')).toHaveText("Explain what is in this image file");
+      expect(page.getByTestId('file-attachment').nth(0).waitFor({ state : 'visible'}));
+      
+      // Wait for AI response loading state to appear
+      await page.getByText('generating response').waitFor({ state: 'visible', timeout: 20000 });
+      
+      // Wait for AI response loading state to disappear and actual response to appear with extended timeout
+      await page.getByText('generating response').waitFor({ state: 'hidden', timeout: 30000 });
+      
+    // Wait for multiple message elements to exist and verify the last one
+      await expect(page.getByTestId('message-text')).toHaveCount(2, { timeout: 20000 });
+      await expect(page.getByTestId('message-text').last()).toHaveText("The image you uploaded contains the Amazon logo. It features the word “amazon” written in a bold, black lowercase font. Below the text, there’s a yellow curved arrow that starts from the letter “a” and points to the letter “z,” symbolizing that Amazon offers everything from A to Z. The arrow also resembles a smile, representing customer satisfaction.", { timeout: 5000 });
+
+
+      //Attach the PDF file
+      await uploadFileButton.click();
+      //Wait for upload dropdown to be visible
+      await page.getByTestId('chat-upload-dropdown-list').waitFor({ state: 'visible' });
+      
+      // Set up file chooser before clicking the button
+      const fileChooserPromisePDF = page.waitForEvent('filechooser');
+      const pdfUploadButton = page.getByTestId('chat-upload-pdf-button');
+      await pdfUploadButton.click();
+      const fileChooserPDF = await fileChooserPromisePDF;
+      
+      // Use an actual image file path - you'll need to place this in your test fixtures
+      await fileChooserPDF.setFiles('tests/playwright/shared/files/sample-pdf.pdf');
+      
+      // Wait for file to be uploaded and displayed
+      await page.getByTestId('chat-uploaded-file').waitFor({ state: 'visible' });
+      
+
+      //Add input to the dock
+      await input.fill('Explain what is in this pdf file');
+      expect(button).toBeEnabled();
+      await page.waitForTimeout(1000)
+      await button.click();
+      await page.waitForTimeout(1000)
+
+      // Wait for user message to appear with increased timeout
+      await expect(page.getByTestId('message-text')).toHaveCount(3, { timeout: 20000 });
+      await expect(page.getByTestId('message-text').last()).toHaveText("Explain what is in this pdf file");
+      expect(page.getByTestId('file-attachment').nth(1).waitFor({ state : 'visible'}));
+      
+      // Wait for AI response loading state to appear
+      await page.getByText('generating response').waitFor({ state: 'visible', timeout: 20000 });
+      
+      // Wait for AI response loading state to disappear and actual response to appear with extended timeout
+      await page.getByText('generating response').waitFor({ state: 'hidden', timeout: 30000 });
+      
+    // Wait for multiple message elements to exist and verify the last one
+      await expect(page.getByTestId('message-text')).toHaveCount(4, { timeout: 20000 });
+      await expect(page.getByTestId('message-text').last()).toHaveText("The PDF file is an informational document from Smallpdf, introducing its digital document management platform. It highlights the platform’s ability to upload, organize, and share files easily. It also mentions that enabling the “Storage” option allows users to store all processed files securely, accessible across devices including computers, phones, and tablets. Additionally, it explains that Smallpdf provides tools to convert, compress, or modify documents, and offers features such as e-signatures, large file sharing, and G Suite integration for organizations. The document concludes by encouraging users to explore these features through links to Smallpdf’s preferences, download page, and Chrome extension.", { timeout: 5000 });
+
+
+      //Attach the PDF file
+      await uploadFileButton.click();
+      //Wait for upload dropdown to be visible
+      await page.getByTestId('chat-upload-dropdown-list').waitFor({ state: 'visible' });
+      
+      // Set up file chooser before clicking the button
+      const fileChooserPromiseText = page.waitForEvent('filechooser');
+      const textUploadButton = page.getByTestId('chat-upload-text-button');
+      await textUploadButton.click();
+      const fileChooserText = await fileChooserPromiseText;
+      
+      // Use an actual image file path - you'll need to place this in your test fixtures
+      await fileChooserText.setFiles('tests/playwright/shared/files/sample-text.txt');
+
+      // Wait for file to be uploaded and displayed
+      await page.getByTestId('chat-uploaded-file').waitFor({ state: 'visible' });
+      
+
+      //Add input to the dock
+      await input.fill('Explain what is in this text file');
+      expect(button).toBeEnabled();
+      await page.waitForTimeout(1000)
+      await button.click();
+      await page.waitForTimeout(1000)
+
+      // Wait for user message to appear with increased timeout
+      await expect(page.getByTestId('message-text')).toHaveCount(5, { timeout: 20000 });
+      await expect(page.getByTestId('message-text').last()).toHaveText("Explain what is in this text file");
+      expect(page.getByTestId('file-attachment').nth(2).waitFor({ state : 'visible'}));
+      
+      // Wait for AI response loading state to appear
+      await page.getByText('generating response').waitFor({ state: 'visible', timeout: 20000 });
+      
+      // Wait for AI response loading state to disappear and actual response to appear with extended timeout
+      await page.getByText('generating response').waitFor({ state: 'hidden', timeout: 30000 });
+      
+    // Wait for multiple message elements to exist and verify the last one
+      await expect(page.getByTestId('message-text')).toHaveCount(6, { timeout: 20000 });
+      await expect(page.getByTestId('message-text').last()).toHaveText("The text file contains a short sample paragraph using the classic filler text “Lorem ipsum dolor sit amet…”, which is commonly used for layout and formatting tests. It’s followed by another line that states the file is provided by Sample-Files.com, inviting users to visit the site for additional sample files and resources. In essence, this is a placeholder text file meant to demonstrate or test text-related functionality, such as file upload, formatting, or text parsing in applications.", { timeout: 5000 });
+
+
+      //Check Session title changed based on the query
+      await page.getByTestId('sidebar-toggle-button').click();
+      await page.getByTestId('expanded-sidebar-content').waitFor({ state: 'visible' });
+      await expect(page.getByTestId('session-item-0')).toContainText('File Explanation');
+      await page.getByTestId('sidebar-toggle-button').click();
+      // Take screenshot after successful chat interaction
+      await expect(page).toHaveScreenshot('file-chat-session-complete.png', { fullPage: true, maxDiffPixelRatio : 0.05 });
+    })
 });

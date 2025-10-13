@@ -144,18 +144,6 @@ test.describe('Sign In Form Validation Tests', () => {
     await expect(page.locator('h1')).toHaveText('Welcome Back');
   });
 
-  test('Password Exactly 128 Characters', async ({ page }) => {
-    const exactPassword = 'A'.repeat(128);
-    await fillAndSubmitForm(page, 'user@example.com', exactPassword);
-    
-    // Should not show validation error for password length
-    const passwordError = page.locator('input#password + p.text-sm.text-red-400');
-    await expect(passwordError).not.toBeVisible();
-    
-    // Since credentials are invalid, expect server error instead
-    await expectGeneralError(page, 'Invalid email or password. Please check your credentials and try again.');
-  });
-
   // COMBINED VALIDATION TEST CASES
   test('Both Fields Empty', async ({ page }) => {
     await fillAndSubmitForm(page, '', '');

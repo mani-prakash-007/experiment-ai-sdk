@@ -86,7 +86,7 @@ export const MOCK_AI_RESPONSES: Record<string, MockAiResponse> = {
     }
   },
   // ─────────────────────────────
-  // 🧠 Markdown Sessions
+  // 🧠 Markdown Sessions 
   // ─────────────────────────────
   "Explain quantum computing ?": {
     document: '',
@@ -96,7 +96,6 @@ export const MOCK_AI_RESPONSES: Record<string, MockAiResponse> = {
 
 Quantum computing leverages **quantum mechanics** to process information in fundamentally new ways. Instead of using bits (0 or 1), quantum computers use *qubits*, which can represent both at once.  
 
----
 
 ## 🔑 Key Concepts
 
@@ -109,7 +108,6 @@ Two qubits can become linked so that changing one affects the other, no matter t
 ### 3. Quantum Gates  
 Quantum operations that manipulate qubits, similar to logic gates in classical computing.  
 
----
 
 ## ⚙️ Why It Matters
 Quantum computing promises exponential speedups in solving problems like:
@@ -126,6 +124,31 @@ qubit.measure(); // returns 0 or 1
 
 > 💡 *In short:* Quantum computing redefines what's computationally possible.
     `,
+    extra: undefined
+  },
+
+  // ─────────────────────────────
+  // 🧠 File Sessions 
+  // ─────────────────────────────
+
+  "Explain what is in this image file": {
+    general: "The image you uploaded contains the Amazon logo. It features the word “amazon” written in a bold, black lowercase font. Below the text, there’s a yellow curved arrow that starts from the letter “a” and points to the letter “z,” symbolizing that Amazon offers everything from A to Z. The arrow also resembles a smile, representing customer satisfaction.",
+    title: "",
+    document: "",
+    extra: undefined
+  },
+
+  "Explain what is in this pdf file": {
+    general: "The PDF file is an informational document from Smallpdf, introducing its digital document management platform. It highlights the platform’s ability to upload, organize, and share files easily. It also mentions that enabling the “Storage” option allows users to store all processed files securely, accessible across devices including computers, phones, and tablets. Additionally, it explains that Smallpdf provides tools to convert, compress, or modify documents, and offers features such as e-signatures, large file sharing, and G Suite integration for organizations. The document concludes by encouraging users to explore these features through links to Smallpdf’s preferences, download page, and Chrome extension.",
+    title: "",
+    document: "",
+    extra: undefined
+  },
+  
+  "Explain what is in this text file": {
+    general: "The text file contains a short sample paragraph using the classic filler text “Lorem ipsum dolor sit amet…”, which is commonly used for layout and formatting tests. It’s followed by another line that states the file is provided by Sample-Files.com, inviting users to visit the site for additional sample files and resources. In essence, this is a placeholder text file meant to demonstrate or test text-related functionality, such as file upload, formatting, or text parsing in applications.",
+    title: "",
+    document: "",
     extra: undefined
   },
 };
@@ -187,6 +210,8 @@ export const MOCK_TITLE_RESPONSES: Record<string, string> = {
   "Write an article about AI": "AI Article Request",
   //Questions - Markdown Response  session
   "Explain quantum computing ?": "Quantum Computing",
+
+  "Explain what is in this image file" : "Image File Explanation"
 };
 
 /**
