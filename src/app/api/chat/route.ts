@@ -166,7 +166,7 @@ function getModelInstance(model: { id: string; name: string; provider: string })
 /**
  * Extract user message content from messages array for mock testing
  */
-function extractUserMessage(messages: any[]): string {
+function extractUserMessage(messages: MessageInput[]): string {
   const lastUserMessage = messages
     .filter(msg => msg.role === 'user')
     .pop();
@@ -180,7 +180,7 @@ function extractUserMessage(messages: any[]): string {
   }
   
   if (Array.isArray(lastUserMessage.content)) {
-    const textPart = lastUserMessage.content.find((part: any) => part.type === 'text');
+    const textPart = lastUserMessage.content.find((part: MessageContentPart) => part.type === 'text');
     return textPart?.text || '';
   }
   

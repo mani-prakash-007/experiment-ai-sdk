@@ -4,13 +4,13 @@ import React from 'react';
 import {
   User, Bot, FileText, ExternalLink, Image as ImageIcon, Paperclip, Loader2, RefreshCw, X, AlertCircle
 } from 'lucide-react';
-import { Message, UploadedFile } from '@/app/types/chat';
+import { Message } from '@/app/types/chat';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { generatePresignedUrl } from '@/utils/presignedUrls';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 interface ChatBubbleProps {
@@ -40,7 +40,7 @@ const ChatBubbleComponent: React.FC<ChatBubbleProps> = ({
   const [fileUrls, setFileUrls] = useState<{ [key: string]: string }>({});
   const [loadingFiles, setLoadingFiles] = useState<{ [key: string]: boolean }>({});
 
-  const handleFileClick = async (storagePath: string, fileName: string) => {
+  const handleFileClick = async (storagePath: string) => {
     // If we already have a URL, use it
     if (fileUrls[storagePath]) {
       window.open(fileUrls[storagePath], '_blank');
@@ -64,7 +64,18 @@ const ChatBubbleComponent: React.FC<ChatBubbleProps> = ({
       setLoadingFiles(prev => ({ ...prev, [storagePath]: false }));
     }
   };
-  const renderFileContent = (fileData: any) => {
+  
+  interface FileData {
+    storagePath: string;
+    fileName: string;
+    metadata?: {
+      type: string;
+      size: number;
+      originalName?: string;
+    };
+  }
+  
+  const renderFileContent = (fileData: FileData) => {
     if (!fileData) return null;
 
     function prettySize( bytes : number) {
@@ -92,7 +103,7 @@ const ChatBubbleComponent: React.FC<ChatBubbleProps> = ({
             ) : (
               <div 
                 className="max-w-full h-30 w-40 bg-gray-700 rounded-lg border border-gray-300 shadow-sm cursor-pointer hover:bg-gray-600 transition-colors flex items-center justify-center"
-                onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
+                onClick={() => handleFileClick(fileData.storagePath)}
                 data-testid="image-placeholder"
               >
                 {isLoading ? (
@@ -119,7 +130,7 @@ const ChatBubbleComponent: React.FC<ChatBubbleProps> = ({
           <div className="space-y-2 max-w-[300px]" data-testid="pdf-file-content">
             <div
               className="flex items-center space-x-3 p-3 bg-red-50 border border-red-200 rounded-lg cursor-pointer hover:bg-red-100 transition-colors w-full"
-              onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
+              onClick={() => handleFileClick(fileData.storagePath)}
               data-testid="pdf-file-preview"
             >
               <div className="flex-shrink-0">
@@ -146,7 +157,7 @@ const ChatBubbleComponent: React.FC<ChatBubbleProps> = ({
           <div className="space-y-2 max-w-[300px]" data-testid="text-file-content">
             <div
               className="flex items-center space-x-3 p-3 bg-green-50 border border-green-200 rounded-lg cursor-pointer hover:bg-green-100 transition-colors"
-              onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
+              onClick={() => handleFileClick(fileData.storagePath)}
               data-testid="text-file-preview"
             >
               <div className="flex-shrink-0">
@@ -161,7 +172,7 @@ const ChatBubbleComponent: React.FC<ChatBubbleProps> = ({
                   {fileData.fileName}
                 </p>
                 <p className="text-xs text-green-600" data-testid="text-file-info">
-                  Text File • {(fileData.metadata.size / 1024).toFixed(1)} KB
+                  Text File • {((fileData.metadata?.size || 0) / 1024).toFixed(1)} KB
                 </p>
               </div>
               <ExternalLink className="w-4 h-4 text-green-600" data-testid="text-external-link-icon" />
@@ -176,7 +187,7 @@ const ChatBubbleComponent: React.FC<ChatBubbleProps> = ({
             <div className="space-y-2 max-w-[300px]" data-testid="generic-file-content">
               <div
                 className="flex items-center space-x-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
-                onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
+                onClick={() => handleFileClick(fileData.storagePath)}
                 data-testid="generic-file-preview"
               >
                 <div className="flex-shrink-0">
