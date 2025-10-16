@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { FileWithMetadata } from '@/app/types/chat';
 import { downloadFile, formatFileSize, getFileTypeColor } from '@/utils/fileUtils';
-import Image from 'next/image';
 
 interface FilePreviewProps {
   file: FileWithMetadata;
