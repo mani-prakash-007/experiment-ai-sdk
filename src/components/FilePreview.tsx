@@ -56,14 +56,14 @@ export function FilePreview({ file, onGenerateUrl, className = '' }: FilePreview
     } finally {
       setLoading(false);
     }
-  }, [loading, onGenerateUrl, file.storagePath]);
+  }, [onGenerateUrl, file.storagePath]); // Removed 'loading' dependency
 
-  // Automatically generate presigned URL for images
+  // Automatically generate presigned URL for images - only once per file
   useEffect(() => {
-    if (file.category === 'image') {
+    if (file.category === 'image' && !previewUrl && !loading && !error) {
       handleGenerateUrl();
     }
-  }, [file.category, handleGenerateUrl]);
+  }, [file.category, file.storagePath, previewUrl, loading, error, handleGenerateUrl]);
 
   const handleClick = async () => {
     if (file.category === 'image' && previewUrl) {
@@ -104,7 +104,7 @@ export function FilePreview({ file, onGenerateUrl, className = '' }: FilePreview
     >
       <div className="relative aspect-square bg-gray-900/30 flex items-center justify-center">
         {file.category === 'image' && previewUrl ? (
-          <Image
+          <img
             src={previewUrl}
             alt={file.originalName}
             className="w-full h-full object-cover"
