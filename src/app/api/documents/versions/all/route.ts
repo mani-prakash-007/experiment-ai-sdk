@@ -54,24 +54,46 @@ export async function GET(request: NextRequest) {
     }
 
     // Group by document and format for UI
-    const groupedVersions = (data || []).reduce((acc: any, version: any) => {
-      const docId = version.doc_id;
+    interface DocumentVersion {
+      doc_id: string;
+      doc_title: string;
+      doc_version: number;
+      reference_type: string;
+      is_current: boolean;
+      created_at: string;
+      message_id: string;
+    }
+    
+    const groupedVersions = (data || []).reduce((acc: Record<string, {
+      doc_id: string;
+      doc_title: string;
+      versions: Array<{
+        version_number: number;
+        reference_type: string;
+        doc_title: string;
+        is_current: boolean;
+        created_at: string;
+        message_id: string;
+      }>;
+    }>, version: unknown) => {
+      const v = version as DocumentVersion;
+      const docId = v.doc_id;
       
       if (!acc[docId]) {
         acc[docId] = {
           doc_id: docId,
-          doc_title: version.doc_title,
+          doc_title: v.doc_title,
           versions: []
         };
       }
       
       acc[docId].versions.push({
-        version_number: version.doc_version,
-        reference_type: version.reference_type,
-        doc_title: version.doc_title,
-        is_current: version.is_current,
-        created_at: version.created_at,
-        message_id: version.message_id
+        version_number: v.doc_version,
+        reference_type: v.reference_type,
+        doc_title: v.doc_title,
+        is_current: v.is_current,
+        created_at: v.created_at,
+        message_id: v.message_id
       });
       
       return acc;

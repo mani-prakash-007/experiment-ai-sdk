@@ -51,8 +51,8 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
       const data = await response.json();
       setLoading(false);
       return data;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
       setLoading(false);
       return null;
     }
@@ -69,8 +69,8 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
       const data = await response.json();
       setLoading(false);
       return data;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
       setLoading(false);
       return null;
     }
@@ -87,8 +87,8 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
       const { versionMeta } = await response.json();
       setLoading(false);
       return versionMeta || [];
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
       setLoading(false);
       return [];
     }
@@ -105,8 +105,8 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
       const { versions } = await response.json();
       setLoading(false);
       return versions || [];
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
       setLoading(false);
       return [];
     }
@@ -132,8 +132,8 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
       const updated = await response.json();
       setLoading(false);
       return updated;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
       setLoading(false);
       return null;
     }
@@ -156,8 +156,8 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
       const inserted = await response.json();
       setLoading(false);
       return inserted;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
       setLoading(false);
       return null;
     }
@@ -183,14 +183,25 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
       const data = await response.json();
       setLoading(false);
       return data;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
       setLoading(false);
       return null;
     }
   }, []);
 
-  const getAllUserDocumentsWithVersions = useCallback(async (sessionId?: string): Promise<any[]> => {
+  const getAllUserDocumentsWithVersions = useCallback(async (sessionId?: string): Promise<Array<{
+    doc_id: string;
+    doc_title: string;
+    versions: Array<{
+      version_number: number;
+      reference_type: string;
+      doc_title: string;
+      is_current: boolean;
+      created_at: string;
+      message_id: string;
+    }>;
+  }>> => {
     if (!userId || !sessionId) return [];
     
     setLoading(true);
@@ -203,8 +214,8 @@ export function useDocuments({ userId }: { userId?: string } = {}) {
       const data = await response.json();
       setLoading(false);
       return data.versions || [];
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
       setLoading(false);
       return [];
     }

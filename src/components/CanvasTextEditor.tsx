@@ -99,9 +99,13 @@ function MenuBar({ editor, editable }: { editor: Editor | null, editable: boolea
             onMouseDown={e => {
               e.preventDefault();
               if (!editable) return;
-              exec
-                ? exec(editor)
-                : (editor.chain().focus() as any)[`toggle${command.charAt(0).toUpperCase() + command.slice(1)}`]?.().run();
+              if (exec) {
+                exec(editor);
+              } else {
+                const chain = editor.chain().focus() as unknown as { [key: string]: (() => { run: () => void }) | undefined };
+                const methodName = `toggle${command.charAt(0).toUpperCase() + command.slice(1)}`;
+                chain[methodName]?.()?.run();
+              }
             }}
             disabled={!editable}
             className={`${buttonClass} ${_active ? activeClass : inactiveClass}`}
@@ -158,7 +162,7 @@ const ACTION_BUTTONS = [
 ];
 
 const CanvasTextEditor: React.FC<Props> = ({ documentId, documentVersion , documentVersionHandler , onSave, onClose, isStreaming = false }) => {
-  const { getDocument, getDocumentVersion, getVersionMetaList, loading: documentLoading, error: documentError } = useDocuments();
+  const { getDocument, getDocumentVersion, getVersionMetaList, loading: documentLoading } = useDocuments();
   
   const [transitionOpacity, setTransitionOpacity] = useState(1);
   const [currentDocumentId, setCurrentDocumentId] = useState(documentId);

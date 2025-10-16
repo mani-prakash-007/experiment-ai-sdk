@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClientForServer } from '@/utils/supabase/server';
 
 // GET /api/sessions - Fetch chat sessions for authenticated user
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabase = await createClientForServer();
     

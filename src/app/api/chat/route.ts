@@ -24,18 +24,41 @@ const CanvasDocumentSchema = z.object({
     .optional(),
 });
 
-function toModelMessages(messages: any[]): ModelMessage[] {
+interface MessageContentPart {
+  type: string;
+  text?: string;
+  image?: string;
+  data?: string;
+  mediaType?: string;
+}
+
+interface MessageInput {
+  role: 'user' | 'assistant' | 'system';
+  content: string | MessageContentPart[];
+  documentReference?: { title?: string; content?: string };
+  attachments?: Array<{ url: string; contentType?: string }>;
+  file?: {
+    storagePath: string;
+    fileUrl?: string;
+    metadata?: {
+      type: string;
+      originalName?: string;
+    };
+  };
+}
+
+function toModelMessages(messages: MessageInput[]): ModelMessage[] {
   return messages.map((msg) => {
     // Handle messages that already have content array structure
     if (Array.isArray(msg.content)) {
       return {
-        role: msg.role as "user" | "assistant" | "system",
+        role: msg.role,
         content: msg.content,
-      };
+      } as ModelMessage;
     }
 
     // Handle original API message format
-    const parts: any[] = [];
+    const parts: MessageContentPart[] = [];
 
     // Add document reference context if present
     if (msg.documentReference) {
@@ -100,9 +123,9 @@ function toModelMessages(messages: any[]): ModelMessage[] {
     }
 
     return {
-      role: msg.role as "user" | "assistant" | "system",
+      role: msg.role,
       content: parts,
-    };
+    } as ModelMessage;
   });
 }
 

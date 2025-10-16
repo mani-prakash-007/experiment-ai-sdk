@@ -168,7 +168,7 @@ const GalleryPage = () => {
               No files found
             </h3>
             <p className="text-gray-400 mb-6 max-w-sm">
-              No files match your search criteria "{searchQuery}".
+              No files match your search criteria &quot;{searchQuery}&quot;.
             </p>
             <button
               onClick={() => setSearchQuery('')}

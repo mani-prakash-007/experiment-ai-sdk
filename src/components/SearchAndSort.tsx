@@ -1,5 +1,5 @@
-import { SearchCheckIcon, SearchCodeIcon, SearchIcon } from 'lucide-react';
-import React, { useState, useMemo } from 'react';
+import { SearchIcon } from 'lucide-react';
+import React from 'react';
 
 interface SearchAndSortProps {
   onSearchChange: (search: string) => void;

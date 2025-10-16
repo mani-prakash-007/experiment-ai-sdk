@@ -109,7 +109,7 @@ export function useGallery({
 
   useEffect(() => {
     loadFiles();
-  }, []); // Only run on mount
+  }, [loadFiles]); // Include loadFiles dependency
 
   return {
     files,

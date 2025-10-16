@@ -6,13 +6,13 @@ import {
   Upload, 
   X, 
   FileText, 
-  Image, 
+  Image as ImageIcon,  
   File,
   Check,
   Folder,
   Edit3
 } from "lucide-react";
-import { FloatingDockProps, ModelOption, UploadedFile, DocumentReference, Message } from '@/app/types/chat';
+import { FloatingDockProps, ModelOption, UploadedFile, DocumentReference } from '@/app/types/chat';
 import { useAuth } from '@/app/hooks/useAuth';
 import { toast } from "sonner";
 
@@ -49,7 +49,7 @@ const getFileTypeFromMime = (mimeType: string): 'image' | 'pdf' | 'text' | 'mark
 const getFileIcon = (mimeType: string) => {
   const type = getFileTypeFromMime(mimeType);
   switch (type) {
-    case 'image': return <Image className="w-4 h-4" />;
+    case 'image': return <ImageIcon className="w-4 h-4"  />;
     case 'pdf': return <File className="w-4 h-4 text-red-400" />;
     case 'markdown': return <FileText className="w-4 h-4 text-blue-400" />;
     case 'text': return <FileText className="w-4 h-4 text-green-400" />;
@@ -153,7 +153,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      onSubmit(e as any);
+      onSubmit(e as unknown as React.FormEvent<HTMLFormElement>);
     }
   };
 
@@ -263,30 +263,8 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
     setInput(input.slice(0, -1));
   };
 
-  //Handle Document Reference
-  const handleDocumentReference = (message: Message) => {
-    if (!message.document) return;
-
-    if (uploadedFile) {
-      toast.error('Cannot reference documents while file is uploaded. Remove file first.');
-      return;
-    }
-    
-    const docRef: DocumentReference = {
-      messageId: message.id,
-      documentId: message.document.doc_id,
-      title: message.document.doc_title,
-      version: message.document.doc_version
-    };
-    
-    onDocumentReference?.(docRef);
-    setShowKeywordRefDropdown(false);
-    setShowDocumentsList(false);
-    setInput(input.slice(0, -1));
-  };
-
   //Handle Version Reference (for new comprehensive version selection)
-  const handleVersionReference = (docId: string, docTitle: string, version: any) => {
+  const handleVersionReference = (docId: string, docTitle: string, version: { is_current?: boolean; version_number?: number }) => {
     if (uploadedFile) {
       toast.error('Cannot reference documents while file is uploaded. Remove file first.');
       return;
@@ -343,7 +321,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
           <div title={`${uploadedFile.fileName} (${uploadedFile.metadata.type})`} className="relative bg-slate-800/70 backdrop-blur-sm border border-slate-600/50 rounded-lg p-2 pr-8 flex items-center space-x-2 max-w-xs cursor-default">
             {uploadedFile.metadata?.type?.startsWith('image/') ? (
               <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-slate-300">
-                <Image className="w-4 h-4" />
+                <ImageIcon className="w-4 h-4" />
               </div>
             ) : (
               <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-slate-300">
@@ -470,7 +448,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                       disabled={isUploading}
                       className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white flex items-center space-x-2 transition-colors duration-150 disabled:opacity-50"
                     >
-                      <Image className="w-4 h-4" />
+                      <ImageIcon className="w-4 h-4" />
                       <span>Images</span>
                       {/* <span className="text-xs text-slate-500 ml-auto">JPG, PNG, GIF, WebP</span> */}
                     </button>
@@ -585,7 +563,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                             <div className="px-3 py-1 text-xs font-medium text-slate-400 bg-slate-700/30 truncate" title={doc.doc_title}>
                               {doc.doc_title}
                             </div>
-                            {doc.versions.map((version: any) => (
+                            {doc.versions.map((version: { version_number: number; is_current?: boolean; created_at: string; reference_type: string; doc_title?: string }) => (
                               <div 
                                 key={`${doc.doc_id}-v${version.version_number}`}
                                 className="px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/50 cursor-pointer flex items-center gap-2 border-l-2 border-slate-600 ml-2"

@@ -112,7 +112,7 @@ export default function SignupForm() {
       if (result?.success) {
         setShowConfirmation(true);
       }
-    } catch (err: any) {
+    } catch {
       // Handle any unexpected errors
       setErrors({ general: 'An unexpected error occurred. Please try again.' });
       setIsLoading(false);
@@ -130,9 +130,9 @@ export default function SignupForm() {
         setErrors({ general: 'GitLab sign in failed. Please try again.' });
         return;
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Handle redirect silently
-      if (err?.message?.includes('NEXT_REDIRECT')) {
+      if ((err as Error)?.message?.includes('NEXT_REDIRECT')) {
         return;
       }
       setErrors({ general: 'GitLab sign in failed. Please try again.' });

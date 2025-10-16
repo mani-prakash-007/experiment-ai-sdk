@@ -4,7 +4,7 @@ import React from 'react';
 import {
   User, Bot, FileText, ExternalLink, Image as ImageIcon, Paperclip, Loader2, RefreshCw, X, AlertCircle
 } from 'lucide-react';
-import { Message } from '@/app/types/chat';
+import { Message, UploadedFile } from '@/app/types/chat';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -26,22 +26,21 @@ interface ChatBubbleProps {
   onDismiss?: (messageId: string) => void;
 }
 
-export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
+const ChatBubbleComponent: React.FC<ChatBubbleProps> = ({
   message,
   user,
   onDocumentClick,
-  isError = false,
+  onRetry,
+  onDismiss,
   isStreaming = false,
   isActiveStream = false,
   streamingContent = '',
   isEditingMode = false,
-  onRetry,
-  onDismiss,
 }) => {
   const [fileUrls, setFileUrls] = useState<{ [key: string]: string }>({});
   const [loadingFiles, setLoadingFiles] = useState<{ [key: string]: boolean }>({});
 
-  const handleFileClick = async (storagePath: string, fileName: string) => {
+  const handleFileClick = async (storagePath: string) => {
     // If we already have a URL, use it
     if (fileUrls[storagePath]) {
       window.open(fileUrls[storagePath], '_blank');
@@ -66,7 +65,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       setLoadingFiles(prev => ({ ...prev, [storagePath]: false }));
     }
   };
-  const renderFileContent = (fileData: any) => {
+  const renderFileContent = (fileData: UploadedFile) => {
     if (!fileData) return null;
 
     function prettySize( bytes : number) {
@@ -93,7 +92,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
             ) : (
               <div 
                 className="max-w-full h-30 w-40 bg-gray-700 rounded-lg border border-gray-300 shadow-sm cursor-pointer hover:bg-gray-600 transition-colors flex items-center justify-center"
-                onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
+                onClick={() => handleFileClick(fileData.storagePath)}
               >
                 {isLoading ? (
                   <div className="text-center">
@@ -119,7 +118,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
           <div className="space-y-2 max-w-[300px]">
             <div
               className="flex items-center space-x-3 p-3 bg-red-50 border border-red-200 rounded-lg cursor-pointer hover:bg-red-100 transition-colors w-full"
-              onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
+              onClick={() => handleFileClick(fileData.storagePath)}
             >
               <div className="flex-shrink-0">
                 {isLoading ? (
@@ -145,7 +144,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
           <div className="space-y-2 max-w-[300px]">
             <div
               className="flex items-center space-x-3 p-3 bg-green-50 border border-green-200 rounded-lg cursor-pointer hover:bg-green-100 transition-colors"
-              onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
+              onClick={() => handleFileClick(fileData.storagePath)}
             >
               <div className="flex-shrink-0">
                 {isLoading ? (
@@ -174,7 +173,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
             <div className="space-y-2 max-w-[300px]">
               <div
                 className="flex items-center space-x-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
-                onClick={() => handleFileClick(fileData.storagePath, fileData.fileName)}
+                onClick={() => handleFileClick(fileData.storagePath)}
               >
                 <div className="flex-shrink-0">
                   {isLoading ? (
@@ -222,8 +221,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     </div>
   );
 
+  // Markdown components with proper types - eslint disable for react-markdown component props
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   const markdownComponents = {
-    code: ({ node, inline, className, children, ...props }: any) => {
+    code: ({ inline, className, children, ...props }: any) => {
       const match = /language-(\w+)/.exec(className || '');
       return !inline && match ? (
         <SyntaxHighlighter
@@ -299,6 +300,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       <td className="border border-gray-600 px-3 py-2">{children}</td>
     ),
   };
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   const renderMessageContent = () => {
     const isAssistant = message.role === 'assistant';
@@ -507,7 +509,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
           }`}>
             {renderMessageContent()}
           </div>
-          {renderFileContent(message.file_data)}
+          {message.file_data && renderFileContent(message.file_data)}
           {message.document && message.role === 'user' && (
             <div className="mt-2 pt-2 border-t border-blue-400/30 flex items-center space-x-2 text-xs text-blue-300">
               <FileText className="w-3 h-3" />
@@ -538,4 +540,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       </div>
     </div>
   );
-});
+};
+
+ChatBubbleComponent.displayName = 'ChatBubble';
+
+export const ChatBubble = React.memo(ChatBubbleComponent);

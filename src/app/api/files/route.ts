@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       // Extract metadata from filename
       const storagePath = `${user.id}/${file.name}`;
       const parts = file.name.split('_');
-      const timestamp = parts[0];
+      // const timestamp = parts[0]; // Unused for now
       const originalName = parts.slice(1).join('_');
       
       // Determine file type from metadata or extension

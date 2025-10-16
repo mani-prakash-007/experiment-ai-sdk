@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ChatSession } from '@/app/types/chat';
 import { toast } from 'sonner';
 
@@ -6,7 +6,7 @@ export const useChatSessions = (userId: string | undefined) => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     if (!userId) return;
     
     try {
@@ -23,11 +23,11 @@ export const useChatSessions = (userId: string | undefined) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     fetchSessions();
-  }, [userId]);
+  }, [fetchSessions]);
 
   const createSession = async (): Promise<string | null> => {
     if (!userId) return null;

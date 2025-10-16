@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { FileWithMetadata } from '@/app/types/chat';
 import { downloadFile, formatFileSize, getFileTypeColor } from '@/utils/fileUtils';
+import Image from 'next/image';
 
 interface FilePreviewProps {
   file: FileWithMetadata;
@@ -37,14 +38,7 @@ export function FilePreview({ file, onGenerateUrl, className = '' }: FilePreview
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Automatically generate presigned URL for images
-  useEffect(() => {
-    if (file.category === 'image') {
-      handleGenerateUrl();
-    }
-  }, [file.storagePath]);
-
-  const handleGenerateUrl = async () => {
+  const handleGenerateUrl = useCallback(async () => {
     if (loading) return;
     
     setLoading(true);
@@ -57,12 +51,19 @@ export function FilePreview({ file, onGenerateUrl, className = '' }: FilePreview
       } else {
         setError('Failed to generate preview URL');
       }
-    } catch (err) {
+    } catch {
       setError('Error generating preview');
     } finally {
       setLoading(false);
     }
-  };
+  }, [loading, onGenerateUrl, file.storagePath]);
+
+  // Automatically generate presigned URL for images
+  useEffect(() => {
+    if (file.category === 'image') {
+      handleGenerateUrl();
+    }
+  }, [file.category, handleGenerateUrl]);
 
   const handleClick = async () => {
     if (file.category === 'image' && previewUrl) {
@@ -103,7 +104,7 @@ export function FilePreview({ file, onGenerateUrl, className = '' }: FilePreview
     >
       <div className="relative aspect-square bg-gray-900/30 flex items-center justify-center">
         {file.category === 'image' && previewUrl ? (
-          <img
+          <Image
             src={previewUrl}
             alt={file.originalName}
             className="w-full h-full object-cover"

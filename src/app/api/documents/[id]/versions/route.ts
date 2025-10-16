@@ -54,35 +54,51 @@ export async function GET(
       );
     }
     
-    const versionsList: any[] = [];
+    interface VersionMeta {
+      version_number: number;
+      created_at: string;
+      created_by: string;
+      change_summary: string;
+    }
+    
+    interface VersionFull extends VersionMeta {
+      id: string;
+      document_id: string;
+      title: string;
+      content: string;
+      extra?: Record<string, unknown>;
+    }
+    
+    const versionsList: Array<VersionMeta | VersionFull> = [];
     
     // Add current version (live document)
     if (currentDoc && !currentDocError) {
+      const doc = currentDoc as unknown as Record<string, unknown>;
       if (metaOnly) {
         versionsList.push({
-          version_number: (currentDoc as any).version_number,
-          created_at: (currentDoc as any).updated_at,
-          created_by: (currentDoc as any).user_id,
+          version_number: doc.version_number as number,
+          created_at: doc.updated_at as string,
+          created_by: doc.user_id as string,
           change_summary: 'Current version'
         });
       } else {
         versionsList.push({
-          id: (currentDoc as any).id,
-          document_id: (currentDoc as any).id,
-          version_number: (currentDoc as any).version_number,
-          title: (currentDoc as any).title,
-          content: (currentDoc as any).content,
-          extra: (currentDoc as any).extra,
+          id: doc.id as string,
+          document_id: doc.id as string,
+          version_number: doc.version_number as number,
+          title: doc.title as string,
+          content: doc.content as string,
+          extra: doc.extra as Record<string, unknown> | undefined,
           change_summary: 'Current version',
-          created_at: (currentDoc as any).updated_at,
-          created_by: (currentDoc as any).user_id
+          created_at: doc.updated_at as string,
+          created_by: doc.user_id as string
         });
       }
     }
     
     // Add all historical versions
-    if (historicalVersions && historicalVersions.length > 0) {
-      versionsList.push(...historicalVersions);
+    if (historicalVersions && Array.isArray(historicalVersions) && historicalVersions.length > 0) {
+      versionsList.push(...(historicalVersions as unknown as Array<VersionMeta | VersionFull>));
     }
     
     // Sort by version number descending (current version first, then historical)

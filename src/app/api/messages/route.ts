@@ -135,7 +135,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Build update object with only provided fields
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (content !== undefined) updateData.content = content;
     if (document !== undefined) updateData.document = document;
 

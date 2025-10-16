@@ -1,7 +1,7 @@
 'use client';
 
 import { experimental_useObject as useObject } from '@ai-sdk/react';
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { z } from 'zod';
 import { ArrowDown } from 'lucide-react';
@@ -42,13 +42,39 @@ type EditorDocumentContent = {
   content: string;
 };
 
-const cleanExtraObject = (extra: any) => {
+// Type for AI context messages
+interface AIContextMessage {
+  role: string;
+  content: string | Array<{ type: string; text?: string; image?: string }>;
+  documentReference?: {
+    title?: string;
+    content?: string;
+    doc_id?: string;
+  };
+  file?: {
+    storagePath: string;
+    fileUrl?: string;
+    urlExpiresAt?: string;
+    metadata?: {
+      type: string;
+      originalName?: string;
+    };
+  };
+  attachments?: Array<{ url: string; contentType?: string }>;
+}
+
+const cleanExtraObject = (extra: Record<string, unknown> | undefined): {
+  wordCount?: number;
+  estimatedReadTime?: string;
+  tags?: string[];
+  category?: string;
+} | undefined => {
   if (!extra) return undefined;
   return {
-    wordCount: extra.wordCount,
-    estimatedReadTime: extra.estimatedReadTime,
-    tags: extra.tags ? extra.tags.filter((tag: any) => typeof tag === 'string' && tag !== undefined) : undefined,
-    category: extra.category,
+    wordCount: typeof extra.wordCount === 'number' ? extra.wordCount : undefined,
+    estimatedReadTime: typeof extra.estimatedReadTime === 'string' ? extra.estimatedReadTime : undefined,
+    tags: Array.isArray(extra.tags) ? (extra.tags as unknown[]).filter((tag: unknown) => typeof tag === 'string' && tag !== undefined) as string[] : undefined,
+    category: typeof extra.category === 'string' ? extra.category : undefined,
   };
 };
 
@@ -81,13 +107,28 @@ export default function Chat() {
   const [streamingDocumentData, setStreamingDocumentData] = useState<{
     title: string;
     content: string;
-    extra?: any;
+    extra?: {
+      wordCount?: number;
+      estimatedReadTime?: string;
+      tags?: string[];
+      category?: string;
+    };
   } | null>(null);
   const [streamingCompleted, setStreamingCompleted] = useState(false);
   const [messageFiles, setMessageFiles] = useState<UploadedFile[]>([]);
-  const [isEditingMode, setIsEditingMode] = useState(false);
-  const [allAvailableVersions, setAllAvailableVersions] = useState<any[]>([]);
   const [isDocumentVersionsLoading, setIsDocumentVersionsLoading] = useState(false);
+  const [allAvailableVersions, setAllAvailableVersions] = useState<Array<{
+    doc_id: string;
+    doc_title: string;
+    versions: Array<{
+      version_number: number;
+      reference_type: string;
+      doc_title: string;
+      is_current: boolean;
+      created_at: string;
+      message_id: string;
+    }>;
+  }>>([]);
   
   // Minimal error/retry state
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
@@ -181,10 +222,10 @@ export default function Chat() {
       const retryCount = (currentMessage?.ai_retry_count || 0) + 1;
       
       await updateMessage(messageId, {
-        ai_state: 'error',
+        ai_state: 'error' as const,
         ai_error_message: errorMessage,
         ai_retry_count: retryCount
-      } as any);
+      });
     } catch (err) {
       console.error('Failed to mark message error:', err);
     }
@@ -203,31 +244,11 @@ export default function Chat() {
 
   // AI request submission with network retry
   const submitAIRequest = useCallback(async (
-    contextToSend: any[],
+    contextToSend: AIContextMessage[],
     model: ModelOption,
-    userMessageId: string,
-    originalRequest: { input: string; uploadedFile?: UploadedFile; documentReference?: any }
+    userMessageId: string
   ) => {
     try {
-      // Store original request temporarily - will move to assistant message when created
-      // Make a deep copy of the context to store exactly what we're sending to AI
-      const contextCopy = JSON.parse(JSON.stringify(contextToSend));
-      
-      const originalRequestData = {
-        input: originalRequest.input,
-        model: {
-          id: model.id,
-          name: model.name,
-          provider: model.provider
-        },
-        uploadedFile: originalRequest.uploadedFile ? { storagePath: originalRequest.uploadedFile.storagePath } : undefined,
-        documentReference: originalRequest.documentReference ? { 
-          documentId: originalRequest.documentReference.documentId, 
-          version: originalRequest.documentReference.version 
-        } : undefined,
-        fullContext: contextCopy // Store the complete conversation context
-      };
-
       // Store the original request data to move to assistant message later
       aiSubmittedSession.current = activeSessionId;
       setStreamingStarted(false);
@@ -258,11 +279,11 @@ export default function Chat() {
     };
 
     // Use the stored full context for exact retry
-    let contextToSend: any[] = [];
+    let contextToSend: AIContextMessage[] = [];
     
     if (orig.fullContext) {
       // Use the exact same context that was sent originally
-      contextToSend = JSON.parse(JSON.stringify(orig.fullContext));
+      contextToSend = JSON.parse(JSON.stringify(orig.fullContext)) as AIContextMessage[];
       
       // Regenerate presigned URLs for any files in the context (they may have expired)
       for (const message of contextToSend) {
@@ -297,7 +318,7 @@ export default function Chat() {
         try {
           const presignedData = await generatePresignedUrl(orig.uploadedFile.storagePath, 7200);
           if (presignedData) {
-            (contextToSend[0] as any).file = { 
+            contextToSend[0].file = { 
               storagePath: orig.uploadedFile.storagePath, 
               fileUrl: presignedData.signedUrl, 
               urlExpiresAt: presignedData.expiresAt 
@@ -317,19 +338,11 @@ export default function Chat() {
             referenceType,
             orig.documentReference.version
           );
-          if (doc) (contextToSend[0] as any).documentReference = doc;
+          if (doc) contextToSend[0].documentReference = doc;
         } catch (err) {
           console.error('Failed to fetch document for retry:', err);
         }
       }
-    }
-
-    // For retry, set editing mode if there's a document reference
-    // The document logic will be handled by checking the message's ai_original_request
-    if (orig.documentReference?.documentId) {
-      setIsEditingMode(true);
-    } else {
-      setIsEditingMode(false);
     }
 
     // Set the streaming message ID to the existing assistant message for retry
@@ -352,10 +365,10 @@ export default function Chat() {
     try {
       // Clear error state before retry and mark as pending
       await updateMessage(assistantMessageId, { 
-        ai_state: 'pending', 
+        ai_state: 'pending' as const, 
         ai_error_message: null,
         content: '' // Clear any previous error content
-      } as any);
+      });
       
       await retryAISubmission(assistantMessageId);
     } catch (err) {
@@ -372,12 +385,12 @@ export default function Chat() {
       ai_state: 'success',
       ai_error_message: null,
       content: '', // Clear content to hide the message
-    } as any);
+    });
   }, [updateMessage]);
 
   // Function to update message document metadata when a document is updated
   // This mirrors the database trigger behavior: change reference_type from 'latest' to 'versioned'
-  const updateMessagesDocumentMetadata = useCallback((documentId: string, newVersionNumber: number) => {
+  const updateMessagesDocumentMetadata = useCallback((documentId: string) => {
     messages?.forEach(message => {
       if (message.document && 
           message.document.doc_id === documentId && 
@@ -498,7 +511,7 @@ export default function Chat() {
     }
 
     // Fetch document content if document reference is provided
-    let documentContext: any = null;
+    let documentContext: { title?: string; content?: string; doc_id?: string } | null = null;
     if (documentReference && documentReference.documentId) {
       try {
         // Use the new method to get document based on reference type
@@ -545,13 +558,11 @@ export default function Chat() {
     const addedMessage = await addMessage(userMessage);
     if (!addedMessage) return;
 
-    // Track document reference for this message and set editing mode
+    // Track document reference for this message
     if (documentReference) {
       currentDocumentReference.current = documentReference;
-      setIsEditingMode(true);
     } else {
       currentDocumentReference.current = null;
-      setIsEditingMode(false);
     }
 
     const currentSession = sessions.find(s => s.id === activeSessionId);
@@ -562,13 +573,13 @@ export default function Chat() {
       }
     }
 
-    let contextToSend: any[];
+    let contextToSend: AIContextMessage[];
     if (messages.length === 0) {
       contextToSend = [{
         role: addedMessage.role,
         content: addedMessage.content,
         file: fileForLLM, // Send with presigned URL to LLM
-        documentReference: documentContext
+        documentReference: documentContext || undefined
       }];
     } else {
       // Generate presigned URLs for all historical messages with files
@@ -596,7 +607,7 @@ export default function Chat() {
       
       // Add document reference to the last message if present
       if (documentContext && messagesWithUrls.length > 0) {
-        (messagesWithUrls[messagesWithUrls.length - 1] as any).documentReference = documentContext;
+        (messagesWithUrls[messagesWithUrls.length - 1] as { role: string; content: string; documentReference?: unknown }).documentReference = documentContext;
       }
       
       contextToSend = messagesWithUrls;
@@ -633,15 +644,11 @@ export default function Chat() {
       
       await updateMessage(assistantMessage.id, {
         ai_original_request: originalRequestData
-      } as any);
+      });
     }
     
     // Use the new error-handling submit function
-    await submitAIRequest(contextToSend, selectedModel, addedMessage.id, {
-      input,
-      uploadedFile,
-      documentReference
-    });
+    await submitAIRequest(contextToSend, selectedModel, addedMessage.id);
     setIsEditorOpen(false);
   };
 
@@ -682,7 +689,7 @@ export default function Chat() {
       
       // Update message metadata to reflect the document update
       if (updatedDocument) {
-        updateMessagesDocumentMetadata(activeDocumentId, updatedDocument.version_number);
+        updateMessagesDocumentMetadata(activeDocumentId);
         
         // Reset activeDocumentVersion to null so CanvasTextEditor shows "Latest"
         // This ensures the version dropdown reflects the newly created version
@@ -732,7 +739,7 @@ export default function Chat() {
               await updateMessage(streamingMessageId, {
                 ai_state: 'pending',
                 content: '' // Clear previous content for retry
-              } as any);
+              });
             }
             
             // Set initial streaming content to show immediate loading
@@ -782,7 +789,7 @@ export default function Chat() {
         try {
           // Prepare the final message updates
           const finalContent = streamingContentRef.current || object?.general || '';
-          const messageUpdates: any = {};
+          const messageUpdates: Partial<Message> = {};
           
           // Check if we have any actual content or document data
           const hasActualContent = finalContent && finalContent.trim();
@@ -819,7 +826,7 @@ export default function Chat() {
               
               if (updatedDocument) {
                 // Update message metadata to reflect the document update
-                updateMessagesDocumentMetadata(referencedDocumentId, updatedDocument.version_number);
+                updateMessagesDocumentMetadata(referencedDocumentId);
                 
                 // Add document metadata to the message update
                 messageUpdates.document = {
@@ -887,7 +894,6 @@ export default function Chat() {
             streamingTimeoutIdRef.current = null;
           }
           aiSubmittedSession.current = null;
-          setIsEditingMode(false);
           currentDocumentReference.current = null;
         }
       }

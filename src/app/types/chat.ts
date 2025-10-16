@@ -74,8 +74,30 @@ export interface FloatingDockProps {
   documentReference?: DocumentReference;
   onDocumentReference?: (doc: DocumentReference) => void;
   onDocumentReferenceRemove?: () => void;
-  allAvailableVersions?: any[];
-  onFetchDocumentVersions?: () => Promise<any[]>;
+  allAvailableVersions?: Array<{
+    doc_id: string;
+    doc_title: string;
+    versions: Array<{
+      version_number: number;
+      reference_type: string;
+      doc_title: string;
+      is_current: boolean;
+      created_at: string;
+      message_id: string;
+    }>;
+  }>;
+  onFetchDocumentVersions?: () => Promise<Array<{
+    doc_id: string;
+    doc_title: string;
+    versions: Array<{
+      version_number: number;
+      reference_type: string;
+      doc_title: string;
+      is_current: boolean;
+      created_at: string;
+      message_id: string;
+    }>;
+  }>>;
   isDocumentVersionsLoading?: boolean;
 }
 
@@ -102,7 +124,12 @@ export interface Message {
     };
     uploadedFile?: { storagePath: string };
     documentReference?: { documentId: string; version?: number };
-    fullContext: any[]; // Complete conversation context sent to AI
+    fullContext: Array<{
+      role: string;
+      content: string | Array<{ type: string; text?: string; image?: string }>;
+      documentReference?: { title?: string; content?: string };
+      attachments?: Array<{ url: string; contentType?: string }>;
+    }>; // Complete conversation context sent to AI
   } | null;
 }
 
